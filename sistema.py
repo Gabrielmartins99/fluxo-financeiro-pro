@@ -1,494 +1,198 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
 from datetime import datetime
 import uuid
 import time
+import os
+from supabase import create_client, Client
 
-# ---------------------------------------------------------
-# PASSO 1: Configuração Inicial e Estilo Cyber-Minimalist
-# ---------------------------------------------------------
+# ========================================================
+# 1. CREDENCIAIS DO BANCO DE DADOS (SUPABASE)
+# ========================================================
+SUPABASE_URL = "COLE_SUA_URL_AQUI"
+SUPABASE_KEY = "COLE_SUA_CHAVE_ANON_AQUI"
+
+# Inicializa a conexão com a nuvem
+@st.cache_resource
+def init_connection():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase: Client = init_connection()
+
+# ========================================================
+# 2. CONFIGURAÇÃO VISUAL E CSS PREMIUM
+# ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        
         html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            font-family: 'Plus Jakarta Sans', sans-serif !important;
-            background-color: #F8FAFC !important;
-            color: #0F172A !important;
+            font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #F8FAFC !important; color: #0F172A !important;
         }
-        h1 {
-            font-weight: 800 !important;
-            letter-spacing: -2px !important;
+        h1, h2, h3 { font-weight: 800 !important; letter-spacing: -1px !important; color: #0F172A !important; }
+        .title-gradient {
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            padding-bottom: 20px;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px;
         }
-        h2, h3, h4, h5, h6 { color: #0F172A !important; font-weight: 700 !important; }
-        label, div[data-testid="stWidgetLabel"] p, .stMarkdown p {
-            color: #475569 !important; font-weight: 700 !important; text-transform: uppercase !important;
-            letter-spacing: 1px !important; font-size: 0.85rem !important;
-        }
-        div[data-baseweb="input"], div[data-baseweb="select"], .stSelectbox div, .stTextInput div, .stMultiSelect div {
-            background-color: #FFFFFF !important; border: 1px solid rgba(79, 70, 229, 0.2) !important;
-            border-radius: 10px !important; color: #0F172A !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
-        }
-        input, select, textarea, div[data-baseweb="select"] * { color: #0F172A !important; background-color: #FFFFFF !important; }
-        div[data-baseweb="popover"], div[role="listbox"], li[data-baseweb="option"] {
-            background-color: #FFFFFF !important; color: #0F172A !important;
-        }
-        li[data-baseweb="option"]:hover { background-color: #F1F5F9 !important; color: #4F46E5 !important; }
-        
-        button[data-baseweb="tab"] {
-            color: #94A3B8 !important; font-weight: 700 !important; font-size: 1rem !important;
-            border-bottom: 3px solid transparent !important; transition: all 0.2s ease;
-        }
-        button[data-baseweb="tab"][aria-selected="true"] { color: #4F46E5 !important; border-bottom: 3px solid #4F46E5 !important; }
-        
-        button, .stButton button, button[data-testid="baseButton-secondary"] {
-            background-color: #FFFFFF !important; border: 1px solid #4F46E5 !important; border-radius: 10px !important;
-            padding: 10px 26px !important; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05) !important;
-        }
-        button p, button span, button div { color: #4F46E5 !important; font-weight: 700 !important; }
-        button:hover, .stButton button:hover {
-            background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%) !important; border-color: transparent !important;
-            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4) !important;
-        }
-        button:hover p, button:hover span { color: #FFFFFF !important; }
-        
+        div[data-baseweb="input"], .stSelectbox div { border-radius: 10px !important; }
         div.stButton > button[kind="primary"] {
-            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important;
-            box-shadow: 0 4px 20px rgba(2, 132, 199, 0.25) !important;
+            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
-        div.stButton > button[kind="primary"] p, div.stButton > button[kind="primary"] span {
-            color: #FFFFFF !important; font-weight: 800 !important;
-        }
-        div.stButton > button[kind="primary"]:hover {
-            box-shadow: 0 4px 25px rgba(2, 132, 199, 0.5) !important; transform: translateY(-1px);
-        }
-        
-        .executive-box {
-            background-color: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.06); border-radius: 16px;
-            padding: 26px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); transition: transform 0.2s ease;
-        }
-        .step-box {
-            background-color: #FFFFFF; border: 1px solid rgba(79, 70, 229, 0.1); border-radius: 12px;
-            padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.01);
-        }
-        .step-num {
-            background-color: #4F46E5; color: white; border-radius: 50%; width: 28px; height: 28px;
-            display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px;
-        }
-        .secure-widget {
-            background-color: #FFFFFF; color: #0F172A; border-radius: 16px; padding: 30px;
-            border: 1px solid rgba(79, 70, 229, 0.2); box-shadow: 0 20px 50px rgba(0,0,0,0.05);
-        }
+        .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
+        .auth-box { background-color: #FFFFFF; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); max-width: 450px; margin: 0 auto; border: 1px solid rgba(79, 70, 229, 0.1); }
     </style>
 """, unsafe_allow_html=True)
 
-# NOVA COLUNA: Competencia
-ARQUIVO_DADOS = "dados_financeiros.csv"
-COLUNAS_PADRAO = ["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"]
+# ========================================================
+# 3. SISTEMA DE AUTENTICAÇÃO (TELA DE LOGIN)
+# ========================================================
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 
-if "of_step" not in st.session_state: st.session_state.of_step = "inicio"
-if "of_banco" not in st.session_state: st.session_state.of_banco = ""
+if not st.session_state.user_email:
+    st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<div class='auth-box'>", unsafe_allow_html=True)
+        aba_login, aba_registro = st.tabs(["🔒 Entrar", "✨ Criar Conta"])
+        
+        with aba_login:
+            email_login = st.text_input("E-mail corporativo ou pessoal", key="log_email")
+            senha_login = st.text_input("Senha de acesso", type="password", key="log_senha")
+            if st.button("Acessar Painel", type="primary", use_container_width=True):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
+                    st.session_state.user_email = res.user.email
+                    st.rerun()
+                except Exception as e:
+                    st.error("E-mail ou senha incorretos. Tente novamente.")
+                    
+        with aba_registro:
+            email_reg = st.text_input("Melhor E-mail", key="reg_email")
+            senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
+            if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
+                try:
+                    res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
+                    st.success("Conta criada com sucesso! Você já pode fazer login na aba ao lado.")
+                except Exception as e:
+                    st.error(f"Erro ao criar conta. Verifique os dados.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.stop() # Bloqueia o resto do código até o usuário logar!
 
+# ========================================================
+# 4. FUNÇÕES DE BANCO DE DADOS (MULTI-TENANT)
+# ========================================================
 def carregar_dados():
-    if os.path.exists(ARQUIVO_DADOS):
-        try:
-            df = pd.read_csv(ARQUIVO_DADOS, dtype=str) 
-            
-            # RETROCOMPATIBILIDADE: Se a planilha antiga não tiver "Competencia", criamos ela baseada na Data
-            if "Competencia" not in df.columns and "Data" in df.columns:
-                df["Competencia"] = pd.to_datetime(df["Data"], errors='coerce').dt.to_period("M").astype(str)
-                
-            for col in COLUNAS_PADRAO:
-                if col not in df.columns: df[col] = "-"
-                
-            if "Responsavel" in df.columns:
-                df["Responsavel"] = df["Responsavel"].replace("Gabriel (Eu)", "Gabriel")
-            df["Valor"] = pd.to_numeric(df["Valor"].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
-            df["Descricao"] = df["Descricao"].fillna("Sem descrição")
-            df["ID"] = df["ID"].apply(lambda x: str(uuid.uuid4()) if pd.isna(x) or str(x).strip() in ["", "-"] else x)
-            return df.dropna(how="all")
-        except: pass
-    return pd.DataFrame(columns=COLUNAS_PADRAO)
+    try:
+        response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
+        if response.data:
+            df = pd.DataFrame(response.data)
+            # Renomeia para o padrão antigo do visual
+            df = df.rename(columns={
+                "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria",
+                "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor",
+                "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status"
+            })
+            df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
+            return df
+    except Exception as e:
+        st.error(f"Erro ao carregar banco: {e}")
+    
+    return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"])
 
 df = carregar_dados()
 
 def obter_opcoes(coluna, lista_base):
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
-        return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-"]])))
+        return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
 
-aba_dashboard, aba_lancamentos, aba_openfinance, aba_gerenciar, aba_importar = st.tabs([
-    "📊 Dashboard Financeiro", "📝 Novos Lançamentos", "🔌 Conexão Open Finance", "⚙️ Gestor de Dados", "📥 Importação de Planilhas"
-])
+# ========================================================
+# 5. HEADER DO USUÁRIO LOGADO
+# ========================================================
+c_head1, c_head2 = st.columns([4, 1])
+with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
+with c_head2:
+    st.write(f"👤 {st.session_state.user_email.split('@')[0]}")
+    if st.button("Sair (Logout)"):
+        st.session_state.user_email = None
+        supabase.auth.sign_out()
+        st.rerun()
 
-# ---------------------------------------------------------
-# ABA DASHBOARD (AGORA FOCADA NA COMPETÊNCIA)
-# ---------------------------------------------------------
+aba_dashboard, aba_lancamentos, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🔌 Open Finance"])
+
+# --- DASHBOARD ---
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        # Garante que a coluna de competência esteja limpa e formatada
-        df["Competencia_Limpa"] = df["Competencia"].replace("NaT", "Sem Data")
-        
         col_filtro1, col_filtro2 = st.columns(2)
         with col_filtro1:
-            meses_disponiveis = sorted([m for m in df["Competencia_Limpa"].unique() if m != "Sem Data"], reverse=True)
+            meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
             mes_selecionado = st.selectbox("📅 Mês de Cobrança / Fatura", ["Ver Tudo"] + meses_disponiveis)
-        with col_filtro2:
-            lista_resps = sorted(df["Responsavel"].dropna().unique().tolist())
-            resps_selected = st.multiselect("👤 Filtrar por Responsável(is)", options=lista_resps, default=lista_resps)
         
-        df_dash = df[df["Competencia_Limpa"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
-        if resps_selected:
-            df_dash = df_dash[df_dash["Responsavel"].isin(resps_selected)]
+        df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
         
-        t_rec = df_dash[(df_dash["Tipo"] == "Receita")]["Valor"].sum()
-        t_desp = df_dash[(df_dash["Tipo"] == "Despesa")]["Valor"].sum()
-        saldo_liquido = t_rec - t_desp
+        t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
+        t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
+        saldo = t_rec - t_desp
         
         c1, c2, c3 = st.columns(3)
-        c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido Filtrado</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas Líquidas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
-        c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas Líquidas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+        c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {saldo:,.2f}</div></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
+        c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
         
-        st.markdown("<br><hr style='border: 1px solid rgba(15,23,42,0.06);'><br>", unsafe_allow_html=True)
-        
-        df_desp = df_dash[df_dash["Tipo"] == "Despesa"]
-        if not df_desp.empty and df_desp["Valor"].sum() > 0:
-            c_g1, c_g2 = st.columns(2)
-            with c_g1:
-                fig1 = px.pie(df_desp, values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4, template="plotly")
-                fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="#475569"))
-                st.plotly_chart(fig1, use_container_width=True)
-            with c_g2:
-                fig2 = px.pie(df_desp, values="Valor", names="Responsavel", title="Participação por Responsável", hole=0.4, template="plotly")
-                fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="#475569"))
-                st.plotly_chart(fig2, use_container_width=True)
+        if t_desp > 0:
+            st.markdown("<br>", unsafe_allow_html=True)
+            fig1 = px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Despesas por Categoria", hole=0.4)
+            st.plotly_chart(fig1, use_container_width=True)
     else:
-        st.info("O Dashboard está aguardando a importação ou registro de dados válidos.")
+        st.info("O Dashboard está aguardando lançamentos.")
 
-# ---------------------------------------------------------
-# ABA LANÇAMENTOS (MOTOR DE PARCELAS E COMPETÊNCIA)
-# ---------------------------------------------------------
+# --- LANÇAMENTOS (SALVANDO NA NUVEM) ---
 with aba_lancamentos:
-    st.subheader("Registrar Nova Movimentação (Suporte a Parcelamento)")
+    st.subheader("Registrar Movimentação")
     col1, col2, col3 = st.columns(3)
     with col1:
-        tipo = st.selectbox("Tipo de Movimento", ["Despesa", "Receita", "Investimento"])
-        data_lancamento = st.date_input("Data da Compra/Ocorrido", datetime.today(), help="A data exata em que a transação foi realizada.")
-        mes_fatura = st.date_input("Mês da 1ª Cobrança (Fatura)", datetime.today(), help="Quando essa conta vai de fato impactar o seu saldo (Competência).")
-        valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+        tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
+        data_lancamento = st.date_input("Data da Compra")
+        mes_fatura = st.date_input("Mês da Fatura")
+        valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
     with col2:
-        parcelas = st.number_input("Número de Parcelas", min_value=1, max_value=120, value=1, step=1)
-        status = st.radio("Status:", ["Pago", "Pendente"], horizontal=True)
-        lista_cat = ["Alimentação", "Moradia", "Transporte", "Saúde", "Cuidados Pessoais", "Lazer", "Educação", "Assinaturas", "Impostos/Taxas", "Outros"] if tipo == "Despesa" else ["Renda Fixa", "Criptomoedas"] if tipo == "Investimento" else ["Salário", "Vendas/Comissão", "Outros"]
-        cat_selecionada = st.selectbox("Categoria Principal", ["+ Adicionar Nova..."] + obter_opcoes("Categoria", lista_cat))
-        categoria = st.text_input("Nova Categoria:") if cat_selecionada == "+ Adicionar Nova..." else cat_selecionada
+        parcelas = st.number_input("Parcelas", min_value=1, max_value=120, value=1)
+        categoria = st.selectbox("Categoria", obter_opcoes("Categoria", ["Alimentação", "Transporte", "Moradia", "Salário"]))
     with col3:
-        sub_selecionada = st.selectbox("Subcategoria", ["+ Adicionar Nova..."] + obter_opcoes("Subcategoria", ["Geral"]))
-        subcategoria = st.text_input("Nova Subcategoria:") if sub_selecionada == "+ Adicionar Nova..." else sub_selecionada
-        conta_selecionada = st.selectbox("Conta/Cartão", ["+ Adicionar Nova..."] + obter_opcoes("Conta_Cartao", ["Nubank", "Banco Inter", "Dinheiro/Pix", "BB", "Sicred", "Picpay"]))
-        conta_cartao = st.text_input("Nova Conta:") if conta_selecionada == "+ Adicionar Nova..." else conta_selecionada
-        resp_selecionado = st.selectbox("Responsável", ["+ Adicionar Novo..."] + obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Casa/Conjunto", "Pais"]))
-        responsavel = st.text_input("Novo Responsável:") if resp_selecionado == "+ Adicionar Novo..." else resp_selecionado
-        descricao = st.text_input("Descrição Livre (Opcional)")
+        conta_cartao = st.selectbox("Conta", obter_opcoes("Conta_Cartao", ["Nubank", "Inter", "Pix"]))
+        descricao = st.text_input("Descrição")
 
     if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
         novas_linhas = []
-        valor_parcela = valor_total / parcelas
-        
-        # O MOTOR DE PARCELAS: Avança os meses de competência automaticamente
+        valor_parc = valor_total / parcelas
         for i in range(parcelas):
-            # Lógica matemática para avançar os meses virando o ano corretamente
             m = mes_fatura.month - 1 + i
             y = mes_fatura.year + (m // 12)
-            m = (m % 12) + 1
-            competencia_calculada = f"{y}-{m:02d}"
+            comp = f"{y}-{(m % 12) + 1:02d}"
             
-            info_parcela = f"{i+1}/{parcelas}" if parcelas > 1 else "À vista"
-            
+            # Formato exato do Banco de Dados Supabase (SQL)
             novas_linhas.append({
-                "ID": str(uuid.uuid4()), 
-                "Data": data_lancamento.strftime("%Y-%m-%d"), 
-                "Competencia": competencia_calculada,
-                "Tipo": tipo,
-                "Categoria": categoria, 
-                "Subcategoria": subcategoria, 
-                "Conta_Cartao": conta_cartao,
-                "Valor": round(valor_parcela, 2), 
-                "Descricao": descricao if descricao else "Sem descrição",
-                "Parcela": info_parcela, 
-                "Responsavel": responsavel, 
-                "Status": status
+                "user_email": st.session_state.user_email,
+                "data_compra": data_lancamento.strftime("%Y-%m-%d"),
+                "competencia": comp,
+                "tipo": tipo, "categoria": categoria, "subcategoria": "Geral",
+                "conta_cartao": conta_cartao, "valor": float(round(valor_parc, 2)),
+                "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if parcelas > 1 else "À vista",
+                "responsavel": "Eu", "status": "Pago"
             })
             
-        df = pd.concat([df, pd.DataFrame(novas_linhas)], ignore_index=True)
-        df.to_csv(ARQUIVO_DADOS, index=False)
-        if parcelas > 1:
-            st.success(f"Sucesso! Compra dividida em {parcelas}x. O sistema projetou os gastos até o mês {competencia_calculada} automaticamente!")
-        else:
-            st.success("Lançamento único salvo com sucesso!")
-        st.rerun()
-
-# ---------------------------------------------------------
-# ABA OPEN FINANCE
-# ---------------------------------------------------------
-with aba_openfinance:
-    if st.session_state.of_step == "inicio":
-        st.subheader("🔌 Hub de Integração Aberta (Open Finance)")
-        st.write("Selecione sua instituição financeira na lista abaixo para ativar o mapeamento automático de extratos.")
-        
-        lista_bancos_completos = [
-            "Banco do Brasil", "Banco Inter", "Bradesco", "BTG Pactual", "C6 Bank", "Caixa Econômica Federal",
-            "Itaú Unibanco", "Mercado Pago", "Nubank", "PagBank", "PicPay", "Santander", "Sicoob", "Sicredi", "XP Investimentos"
-        ]
-        
-        col_selecao, col_botao = st.columns([3, 1])
-        with col_selecao:
-            banco_escolhido = st.selectbox("Busque a sua Instituição Financeira:", lista_bancos_completos)
-        with col_botao:
-            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-            if st.button(f"🔗 Vincular Banco", type="primary", use_container_width=True):
-                st.session_state.of_banco = banco_escolhido
-                st.session_state.of_step = "auth_widget"
-                st.rerun()
-
-        st.markdown("<br><hr style='border: 1px solid rgba(15,23,42,0.06);'><br>", unsafe_allow_html=True)
-        st.markdown("### 🔐 Entenda o Fluxo de Autorização Bancária")
-        col_step1, col_step2, col_step3 = st.columns(3)
-        with col_step1: st.markdown('<div class="step-box"><h4><span class="step-num">1</span> Redirecionamento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">A plataforma abre uma janela segura criptografada. Você autoriza no ecossistema do seu banco.</p></div>', unsafe_allow_html=True)
-        with col_step2: st.markdown('<div class="step-box"><h4><span class="step-num">2</span> Consentimento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">Você aprova o compartilhamento Read-Only. Senhas não são compartilhadas.</p></div>', unsafe_allow_html=True)
-        with col_step3: st.markdown('<div class="step-box"><h4><span class="step-num">3</span> Tokenização</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">O banco emite um Token. Nosso robô lê os extratos e consolida os gráficos automaticamente.</p></div>', unsafe_allow_html=True)
-
-    elif st.session_state.of_step == "auth_widget":
-        st.markdown(f"""
-            <div class="secure-widget">
-                <h3 style="color:#4F46E5 !important; margin-bottom:5px;">🔒 Autorização de Leitura via Open Finance</h3>
-                <p style="color:#64748B; font-size:0.9rem;">Instituição Alvo: <b>{st.session_state.of_banco}</b></p>
-                <hr style="border-color: rgba(0,0,0,0.06); margin: 15px 0;">
-                <p style="font-size:0.95rem; font-weight:600;">Esta aplicação solicita acesso temporário para leitura de dados:</p>
-                <ul style="color:#475569; font-size:0.9rem; padding-left:20px; margin: 15px 0;">
-                    <li>Histórico detalhado de depósitos, despesas, PIX e transferências</li>
-                    <li>Faturas e lançamentos futuros de cartões de crédito</li>
-                </ul>
-                <p style="color:#94A3B8; font-size:0.85rem; margin-bottom:20px;">
-                    🛡️ Criptografia AES-256 de ponta a ponta homologada pelo Banco Central.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        c_act1, c_act2 = st.columns([1, 4])
-        with c_act1:
-            if st.button("✔️ Autorizar Acesso", type="primary"):
-                st.session_state.of_step = "mock_login_gateway"
-                st.rerun()
-        with c_act2:
-            if st.button("❌ Cancelar Operação"):
-                st.session_state.of_step = "inicio"
-                st.rerun()
-
-    elif st.session_state.of_step == "mock_login_gateway":
-        st.subheader(f"🔐 Portal de Autenticação Segura: {st.session_state.of_banco}")
-        col_lg1, col_lg2 = st.columns(2)
-        with col_lg1:
-            st.text_input("Número da Agência (4 dígitos)", value="")
-            st.text_input("Número da Conta com Dígito", value="")
-        with col_lg2:
-            st.info("💡 Aviso: Para transição de ambiente (Real Data API), aguardando inserção das chaves Client_ID e Secret da integradora financeira (Ex: Pluggy).")
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔗 Confirmar Chave e Sincronizar", type="primary"):
-            st.session_state.of_step = "processando"
-            st.rerun()
-
-    elif st.session_state.of_step == "processando":
-        st.subheader("⚡ Sincronizando Contas Bancárias")
-        barra = st.progress(0)
-        status_text = st.empty()
-        
-        status_text.text("Buscando chaves de acesso criptografadas (Tokens)...")
-        time.sleep(0.8)
-        barra.progress(30)
-        
-        status_text.text(f"Autenticando sessão no servidor seguro do {st.session_state.of_banco}...")
-        time.sleep(1.0)
-        barra.progress(70)
-        
-        status_text.text("Estruturando transações pendentes...")
-        time.sleep(0.7)
-        barra.progress(100)
-        
-        hoje_str = datetime.today().strftime("%Y-%m-%d")
-        comp_str = datetime.today().strftime("%Y-%m")
-        
-        linhas_banco = pd.DataFrame([
-            {
-                "ID": str(uuid.uuid4()), "Data": hoje_str, "Competencia": comp_str, "Tipo": "Despesa",
-                "Categoria": "Transporte", "Subcategoria": "Importado", "Conta_Cartao": st.session_state.of_banco,
-                "Valor": 28.90, "Descricao": f"UBER TRIP - {st.session_state.of_banco.upper()}", "Parcela": "À vista", 
-                "Responsavel": "Gabriel", "Status": "Pago"
-            },
-            {
-                "ID": str(uuid.uuid4()), "Data": hoje_str, "Competencia": comp_str, "Tipo": "Receita",
-                "Categoria": "Vendas/Comissão", "Subcategoria": "Importado", "Conta_Cartao": st.session_state.of_banco,
-                "Valor": 350.00, "Descricao": f"PIX RECEBIDO - {st.session_state.of_banco.upper()}", "Parcela": "À vista", 
-                "Responsavel": "Gabriel", "Status": "Pago"
-            }
-        ])
-        
-        df = pd.concat([df, linhas_banco], ignore_index=True)
-        df.to_csv(ARQUIVO_DADOS, index=False)
-        
-        st.session_state.of_step = "inicio"
-        st.success(f"🎉 ESPETÁCULO! Conexão estabelecida com o {st.session_state.of_banco}. Dados injetados com sucesso!")
-        st.balloons()
+        supabase.table("lancamentos").insert(novas_linhas).execute()
+        st.success("Lançamento salvo diretamente na Nuvem Supabase!")
         time.sleep(1.5)
         st.rerun()
 
-# ---------------------------------------------------------
-# ABA GERENCIAR
-# ---------------------------------------------------------
-with aba_gerenciar:
-    st.subheader("⚙️ Configurações de Sistema")
-    if st.button("🗑 ZERAR BASE DE DADOS (Limpeza de Testes)", type="secondary"):
-        if os.path.exists(ARQUIVO_DADOS):
-            os.remove(ARQUIVO_DADOS)
-            st.success("Base de dados limpa!")
-            st.rerun()
-            
-    st.markdown("<br>", unsafe_allow_html=True)
-    col_a, col_b, col_c = st.columns(3)
-    with col_a: coluna_para_mudar = st.selectbox("Renomear em lote:", ["Responsavel", "Categoria", "Subcategoria", "Conta_Cartao", "Status"])
-    valores_atuais = ["Nenhum dado"]
-    if not df.empty and coluna_para_mudar in df.columns:
-        lst = [x.strip() for x in df[coluna_para_mudar].dropna().astype(str).unique() if x.strip() not in ["", "nan"]]
-        if lst: valores_atuais = sorted(lst)
-    with col_b: valor_antigo = st.selectbox("Nome atual:", valores_atuais)
-    with col_c: valor_novo = st.text_input("Novo nome:")
-    if st.button("Aplicar Mudança", type="secondary") and valor_antigo != "Nenhum dado" and valor_novo.strip() != "":
-        df.loc[df[coluna_para_mudar].astype(str).str.strip() == valor_antigo, coluna_para_mudar] = valor_novo
-        df.to_csv(ARQUIVO_DADOS, index=False)
-        st.success("Alterado!")
-        st.rerun()
-        
-    st.markdown("---")
-    if not df.empty:
-        df_editado = st.data_editor(df, use_container_width=True, num_rows="dynamic", column_config={"ID": None} if "ID" in df.columns else {})
-        if st.button("💾 Salvar Edições Manuais", type="primary"):
-            df_editado.to_csv(ARQUIVO_DADOS, index=False)
-            st.rerun()
-
-# ---------------------------------------------------------
-# ABA IMPORTADOR
-# ---------------------------------------------------------
-with aba_importar:
-    st.subheader("📥 Importação Direta de Matrizes Excel")
-    arquivo_upado = st.file_uploader("Arquivo Excel (.xlsx, .xls)", type=['xlsx', 'xls'])
-    
-    if arquivo_upado:
-        try:
-            excel_file = pd.ExcelFile(arquivo_upado, engine='openpyxl')
-            abas_disponiveis = excel_file.sheet_names
-            aba_selecionada = st.selectbox("Selecione o Mês (Aba) que deseja importar:", abas_disponiveis)
-            
-            if st.button("🚀 Processar Aba Selecionada", type="primary"):
-                df_bruto = excel_file.parse(aba_selecionada, header=None)
-                novos_dados = []
-                
-                meses_map = {
-                    "JANEIRO": "01", "FEVEREIRO": "02", "MARÇO": "03", "MARCO": "03",
-                    "ABRIL": "04", "MAIO": "05", "JUNHO": "06", "JULHO": "07", 
-                    "AGOSTO": "08", "SETEMBRO": "09", "OUTUBRO": "10", "NOVEMBRO": "11", "DEZEMBRO": "12"
-                }
-                mes_num_alvo = meses_map.get(aba_selecionada.upper().strip(), "06")
-                
-                header_idx = -1
-                for i in range(min(15, len(df_bruto))):
-                    linha_str = " ".join([str(x).upper() for x in df_bruto.iloc[i].fillna("")]).upper()
-                    if "DATA" in linha_str and ("RECEITA" in linha_str or "DESPESA" in linha_str):
-                        header_idx = i; break
-                
-                if header_idx != -1:
-                    nomes_colunas = []
-                    for col_idx in range(len(df_bruto.columns)):
-                        val_row2 = str(df_bruto.iloc[header_idx, col_idx]).strip().upper()
-                        val_row1 = str(df_bruto.iloc[header_idx - 1, col_idx]).strip().upper() if header_idx > 0 else ""
-                        if val_row2 not in ["", "NAN", "NONE", "VAZIO", "-"]: nome_final = val_row2
-                        elif val_row1 not in ["", "NAN", "NONE", "VAZIO", "-"]: nome_final = val_row1
-                        else: nome_final = f"COL_{col_idx}"
-                        nomes_colunas.append(nome_final)
-                    
-                    df_dados = df_bruto.iloc[header_idx+1:].copy()
-                    df_dados.columns = nomes_colunas
-                    
-                    col_data = next((c for c in nomes_colunas if "DATA" in c), None)
-                    col_rec = next((c for c in nomes_colunas if "RECEITA" in c), None)
-                    col_desp = next((c for c in nomes_colunas if "DESPESA" in c), None)
-                    col_desc = next((c for c in nomes_colunas if "DESCRI" in c), None)
-                    col_cat = next((c for c in nomes_colunas if "CATEGORIA" in c), None)
-                    col_banco = next((c for c in nomes_colunas if "BANC" in c or "CONT" in c), None)
-                    col_ano = next((c for c in nomes_colunas if "ANO" in c), None)
-                    
-                    mapping_responsaveis = {"GABRIEL": "Gabriel", "THATA": "Tainá", "NÓS": "Casa/Conjunto", "PAI/MÃE": "Pais"}
-                    def limpa_valor(v):
-                        if pd.isna(v): return 0.0
-                        vs = str(v).upper().replace('R$', '').strip()
-                        if vs in ['', '-', '0', '0.0', '0,0']: return 0.0
-                        if ',' in vs and '.' in vs:
-                            if vs.rfind(',') > vs.rfind('.'): vs = vs.replace('.', '').replace(',', '.')
-                            else: vs = vs.replace(',', '')
-                        elif ',' in vs: vs = vs.replace(',', '.')
-                        try: return abs(float(vs))
-                        except: return 0.0
-
-                    for _, row in df_dados.iterrows():
-                        if col_data and str(row[col_data]).strip().upper() == "TOTAL": continue
-                        data_orig = str(row[col_data]).strip() if col_data else ""
-                        if data_orig in ["", "nan", "NaT", "None", "VAZIO"]: continue
-                        
-                        v_rec = limpa_valor(row[col_rec]) if col_rec else 0.0
-                        v_desp = limpa_valor(row[col_desp]) if col_desp else 0.0
-                        tipo_linha = "Receita" if v_rec > 0 else "Despesa"
-                        
-                        splits_encontrados = {}
-                        for keyword, label in mapping_responsaveis.items():
-                            col_alvo = next((c for c in nomes_colunas if keyword in c), None)
-                            if col_alvo and pd.notna(row[col_alvo]):
-                                val_sub = limpa_valor(row[col_alvo])
-                                if val_sub > 0: splits_encontrados[label] = val_sub
-                        
-                        def registrar(val_item, resp_item):
-                            novos_dados.append({
-                                "ID": str(uuid.uuid4()), "Data": f"2026-{mes_num_alvo}-01", "Competencia": f"2026-{mes_num_alvo}",
-                                "Tipo": tipo_linha, "Categoria": str(row[col_cat]).title() if col_cat and pd.notna(row[col_cat]) else "Importado",
-                                "Subcategoria": "Importado",
-                                "Conta_Cartao": str(row[col_banco]).strip() if col_banco and pd.notna(row[col_banco]) and str(row[col_banco]).strip() != "-" else "Dinheiro/Pix",
-                                "Valor": val_item, "Descricao": str(row[col_desc]).strip() if col_desc and pd.notna(row[col_desc]) else "Sem descrição",
-                                "Parcela": "À vista", "Responsavel": resp_item, "Status": "Pago"
-                            })
-
-                        if splits_encontrados:
-                            for resp_nome, val_repartido in splits_encontrados.items(): registrar(val_repartido, resp_nome)
-                        else:
-                            valor_total_linha = v_rec if v_rec > 0 else v_desp
-                            if valor_total_linha > 0: registrar(valor_total_linha, "Gabriel")
-                        
-                if novos_dados:
-                    df_novos = pd.DataFrame(novos_dados)
-                    df = pd.concat([df, df_novos], ignore_index=True)
-                    df.to_csv(ARQUIVO_DADOS, index=False)
-                    st.success(f"🎉 Processamento Concluído com Sucesso!")
-                    st.balloons()
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Erro crítico: {e}")
+# --- OPEN FINANCE ---
+with aba_openfinance:
+    st.subheader("🔌 Hub de Integração Aberta")
+    st.info("A infraestrutura do banco de dados na nuvem (Supabase) foi configurada com sucesso. A conexão via Hub Integrador será iniciada na próxima etapa.")
