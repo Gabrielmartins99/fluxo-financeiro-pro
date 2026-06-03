@@ -7,7 +7,7 @@ import uuid
 import time
 
 # ---------------------------------------------------------
-# PASSO 1: Configuração Inicial e Engenharia de Estilo Cyber-Minimalist
+# PASSO 1: Configuração Inicial e Estilo Cyber-Minimalist
 # ---------------------------------------------------------
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
@@ -20,7 +20,6 @@ st.markdown("""
             background-color: #F8FAFC !important;
             color: #0F172A !important;
         }
-        
         h1 {
             font-weight: 800 !important;
             letter-spacing: -2px !important;
@@ -29,146 +28,72 @@ st.markdown("""
             -webkit-text-fill-color: transparent;
             padding-bottom: 20px;
         }
-        
-        h2, h3, h4, h5, h6 {
-            color: #0F172A !important;
-            font-weight: 700 !important;
-        }
-        
+        h2, h3, h4, h5, h6 { color: #0F172A !important; font-weight: 700 !important; }
         label, div[data-testid="stWidgetLabel"] p, .stMarkdown p {
-            color: #475569 !important;
-            font-weight: 700 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 1px !important;
-            font-size: 0.85rem !important;
+            color: #475569 !important; font-weight: 700 !important; text-transform: uppercase !important;
+            letter-spacing: 1px !important; font-size: 0.85rem !important;
         }
-        
         div[data-baseweb="input"], div[data-baseweb="select"], .stSelectbox div, .stTextInput div, .stMultiSelect div {
-            background-color: #FFFFFF !important;
-            border: 1px solid rgba(79, 70, 229, 0.2) !important;
-            border-radius: 10px !important;
-            color: #0F172A !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+            background-color: #FFFFFF !important; border: 1px solid rgba(79, 70, 229, 0.2) !important;
+            border-radius: 10px !important; color: #0F172A !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
         }
-        
-        input, select, textarea, div[data-baseweb="select"] * {
-            color: #0F172A !important;
-            background-color: #FFFFFF !important;
-        }
-        
+        input, select, textarea, div[data-baseweb="select"] * { color: #0F172A !important; background-color: #FFFFFF !important; }
         div[data-baseweb="popover"], div[role="listbox"], li[data-baseweb="option"] {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
+            background-color: #FFFFFF !important; color: #0F172A !important;
         }
-        li[data-baseweb="option"]:hover {
-            background-color: #F1F5F9 !important;
-            color: #4F46E5 !important;
-        }
+        li[data-baseweb="option"]:hover { background-color: #F1F5F9 !important; color: #4F46E5 !important; }
         
         button[data-baseweb="tab"] {
-            color: #94A3B8 !important;
-            font-weight: 700 !important;
-            font-size: 1rem !important;
-            border-bottom: 3px solid transparent !important;
-            transition: all 0.2s ease;
+            color: #94A3B8 !important; font-weight: 700 !important; font-size: 1rem !important;
+            border-bottom: 3px solid transparent !important; transition: all 0.2s ease;
         }
-        button[data-baseweb="tab"][aria-selected="true"] {
-            color: #4F46E5 !important;
-            border-bottom: 3px solid #4F46E5 !important;
-        }
+        button[data-baseweb="tab"][aria-selected="true"] { color: #4F46E5 !important; border-bottom: 3px solid #4F46E5 !important; }
         
         button, .stButton button, button[data-testid="baseButton-secondary"] {
-            background-color: #FFFFFF !important;
-            border: 1px solid #4F46E5 !important;
-            border-radius: 10px !important;
-            padding: 10px 26px !important;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            background-color: #FFFFFF !important; border: 1px solid #4F46E5 !important; border-radius: 10px !important;
+            padding: 10px 26px !important; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
             box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05) !important;
         }
-        button p, button span, button div {
-            color: #4F46E5 !important;
-            font-weight: 700 !important;
-        }
+        button p, button span, button div { color: #4F46E5 !important; font-weight: 700 !important; }
         button:hover, .stButton button:hover {
-            background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%) !important;
-            border-color: transparent !important;
+            background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%) !important; border-color: transparent !important;
             box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4) !important;
         }
-        button:hover p, button:hover span {
-            color: #FFFFFF !important;
-        }
+        button:hover p, button:hover span { color: #FFFFFF !important; }
         
         div.stButton > button[kind="primary"] {
-            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important;
-            border: none !important;
+            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important;
             box-shadow: 0 4px 20px rgba(2, 132, 199, 0.25) !important;
         }
         div.stButton > button[kind="primary"] p, div.stButton > button[kind="primary"] span {
-            color: #FFFFFF !important;
-            font-weight: 800 !important;
+            color: #FFFFFF !important; font-weight: 800 !important;
         }
         div.stButton > button[kind="primary"]:hover {
-            box-shadow: 0 4px 25px rgba(2, 132, 199, 0.5) !important;
-            transform: translateY(-1px);
+            box-shadow: 0 4px 25px rgba(2, 132, 199, 0.5) !important; transform: translateY(-1px);
         }
         
         .executive-box {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(15, 23, 42, 0.06);
-            border-radius: 16px;
-            padding: 26px;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
-            transition: transform 0.2s ease;
+            background-color: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.06); border-radius: 16px;
+            padding: 26px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); transition: transform 0.2s ease;
         }
-        
         .step-box {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(79, 70, 229, 0.1);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.01);
+            background-color: #FFFFFF; border: 1px solid rgba(79, 70, 229, 0.1); border-radius: 12px;
+            padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.01);
         }
         .step-num {
-            background-color: #4F46E5;
-            color: white;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-right: 10px;
+            background-color: #4F46E5; color: white; border-radius: 50%; width: 28px; height: 28px;
+            display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px;
         }
-
-        .bank-card {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-            transition: all 0.2s ease;
-        }
-        .bank-card:hover {
-            border-color: #4F46E5;
-            transform: translateY(-2px);
-        }
-        
         .secure-widget {
-            background-color: #FFFFFF;
-            color: #0F172A;
-            border-radius: 16px;
-            padding: 30px;
-            border: 1px solid rgba(79, 70, 229, 0.2);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.05);
+            background-color: #FFFFFF; color: #0F172A; border-radius: 16px; padding: 30px;
+            border: 1px solid rgba(79, 70, 229, 0.2); box-shadow: 0 20px 50px rgba(0,0,0,0.05);
         }
     </style>
 """, unsafe_allow_html=True)
 
+# NOVA COLUNA: Competencia
 ARQUIVO_DADOS = "dados_financeiros.csv"
-COLUNAS_PADRAO = ["ID", "Data", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"]
+COLUNAS_PADRAO = ["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"]
 
 if "of_step" not in st.session_state: st.session_state.of_step = "inicio"
 if "of_banco" not in st.session_state: st.session_state.of_banco = ""
@@ -177,8 +102,14 @@ def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
         try:
             df = pd.read_csv(ARQUIVO_DADOS, dtype=str) 
+            
+            # RETROCOMPATIBILIDADE: Se a planilha antiga não tiver "Competencia", criamos ela baseada na Data
+            if "Competencia" not in df.columns and "Data" in df.columns:
+                df["Competencia"] = pd.to_datetime(df["Data"], errors='coerce').dt.to_period("M").astype(str)
+                
             for col in COLUNAS_PADRAO:
                 if col not in df.columns: df[col] = "-"
+                
             if "Responsavel" in df.columns:
                 df["Responsavel"] = df["Responsavel"].replace("Gabriel (Eu)", "Gabriel")
             df["Valor"] = pd.to_numeric(df["Valor"].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
@@ -201,21 +132,22 @@ aba_dashboard, aba_lancamentos, aba_openfinance, aba_gerenciar, aba_importar = s
 ])
 
 # ---------------------------------------------------------
-# ABA DASHBOARD
+# ABA DASHBOARD (AGORA FOCADA NA COMPETÊNCIA)
 # ---------------------------------------------------------
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        df["Data_Limpa"] = pd.to_datetime(df["Data"], errors='coerce')
-        df["Mes_Ano"] = df["Data_Limpa"].dt.to_period("M").astype(str)
+        # Garante que a coluna de competência esteja limpa e formatada
+        df["Competencia_Limpa"] = df["Competencia"].replace("NaT", "Sem Data")
         
         col_filtro1, col_filtro2 = st.columns(2)
         with col_filtro1:
-            mes_selecionado = st.selectbox("📅 Janela Temporal (Mês)", ["Ver Tudo"] + sorted(df["Mes_Ano"].unique(), reverse=True))
+            meses_disponiveis = sorted([m for m in df["Competencia_Limpa"].unique() if m != "Sem Data"], reverse=True)
+            mes_selecionado = st.selectbox("📅 Mês de Cobrança / Fatura", ["Ver Tudo"] + meses_disponiveis)
         with col_filtro2:
             lista_resps = sorted(df["Responsavel"].dropna().unique().tolist())
             resps_selected = st.multiselect("👤 Filtrar por Responsável(is)", options=lista_resps, default=lista_resps)
         
-        df_dash = df[df["Mes_Ano"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
+        df_dash = df[df["Competencia_Limpa"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
         if resps_selected:
             df_dash = df_dash[df_dash["Responsavel"].isin(resps_selected)]
         
@@ -245,121 +177,111 @@ with aba_dashboard:
         st.info("O Dashboard está aguardando a importação ou registro de dados válidos.")
 
 # ---------------------------------------------------------
-# ABA LANÇAMENTOS
+# ABA LANÇAMENTOS (MOTOR DE PARCELAS E COMPETÊNCIA)
 # ---------------------------------------------------------
 with aba_lancamentos:
-    st.subheader("Registrar Nova Movimentação Manual")
+    st.subheader("Registrar Nova Movimentação (Suporte a Parcelamento)")
     col1, col2, col3 = st.columns(3)
     with col1:
         tipo = st.selectbox("Tipo de Movimento", ["Despesa", "Receita", "Investimento"])
-        data_lancamento = st.date_input("Data do Ocorrido", datetime.today())
+        data_lancamento = st.date_input("Data da Compra/Ocorrido", datetime.today(), help="A data exata em que a transação foi realizada.")
+        mes_fatura = st.date_input("Mês da 1ª Cobrança (Fatura)", datetime.today(), help="Quando essa conta vai de fato impactar o seu saldo (Competência).")
         valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+    with col2:
         parcelas = st.number_input("Número de Parcelas", min_value=1, max_value=120, value=1, step=1)
         status = st.radio("Status:", ["Pago", "Pendente"], horizontal=True)
-    with col2:
         lista_cat = ["Alimentação", "Moradia", "Transporte", "Saúde", "Cuidados Pessoais", "Lazer", "Educação", "Assinaturas", "Impostos/Taxas", "Outros"] if tipo == "Despesa" else ["Renda Fixa", "Criptomoedas"] if tipo == "Investimento" else ["Salário", "Vendas/Comissão", "Outros"]
         cat_selecionada = st.selectbox("Categoria Principal", ["+ Adicionar Nova..."] + obter_opcoes("Categoria", lista_cat))
         categoria = st.text_input("Nova Categoria:") if cat_selecionada == "+ Adicionar Nova..." else cat_selecionada
+    with col3:
         sub_selecionada = st.selectbox("Subcategoria", ["+ Adicionar Nova..."] + obter_opcoes("Subcategoria", ["Geral"]))
         subcategoria = st.text_input("Nova Subcategoria:") if sub_selecionada == "+ Adicionar Nova..." else sub_selecionada
-    with col3:
-        conta_selecionada = st.selectbox("Conta/Corretora", ["+ Adicionar Nova..."] + obter_opcoes("Conta_Cartao", ["Nubank", "Banco Inter", "Dinheiro/Pix", "BB", "Sicred", "Picpay"]))
+        conta_selecionada = st.selectbox("Conta/Cartão", ["+ Adicionar Nova..."] + obter_opcoes("Conta_Cartao", ["Nubank", "Banco Inter", "Dinheiro/Pix", "BB", "Sicred", "Picpay"]))
         conta_cartao = st.text_input("Nova Conta:") if conta_selecionada == "+ Adicionar Nova..." else conta_selecionada
         resp_selecionado = st.selectbox("Responsável", ["+ Adicionar Novo..."] + obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Casa/Conjunto", "Pais"]))
         responsavel = st.text_input("Novo Responsável:") if resp_selecionado == "+ Adicionar Novo..." else resp_selecionado
         descricao = st.text_input("Descrição Livre (Opcional)")
 
-    if st.button("💾 Salvar Movimentação Manualmente", type="primary") and valor_total > 0:
-        nova_linha = pd.DataFrame([{
-            "ID": str(uuid.uuid4()), "Data": data_lancamento.strftime("%Y-%m-%d"), "Tipo": tipo,
-            "Categoria": categoria, "Subcategoria": subcategoria, "Conta_Cartao": conta_cartao,
-            "Valor": valor_total, "Descricao": descricao if descricao else "Sem descrição",
-            "Parcela": "À vista", "Responsavel": responsavel, "Status": status
-        }])
-        df = pd.concat([df, nova_linha], ignore_index=True)
+    if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
+        novas_linhas = []
+        valor_parcela = valor_total / parcelas
+        
+        # O MOTOR DE PARCELAS: Avança os meses de competência automaticamente
+        for i in range(parcelas):
+            # Lógica matemática para avançar os meses virando o ano corretamente
+            m = mes_fatura.month - 1 + i
+            y = mes_fatura.year + (m // 12)
+            m = (m % 12) + 1
+            competencia_calculada = f"{y}-{m:02d}"
+            
+            info_parcela = f"{i+1}/{parcelas}" if parcelas > 1 else "À vista"
+            
+            novas_linhas.append({
+                "ID": str(uuid.uuid4()), 
+                "Data": data_lancamento.strftime("%Y-%m-%d"), 
+                "Competencia": competencia_calculada,
+                "Tipo": tipo,
+                "Categoria": categoria, 
+                "Subcategoria": subcategoria, 
+                "Conta_Cartao": conta_cartao,
+                "Valor": round(valor_parcela, 2), 
+                "Descricao": descricao if descricao else "Sem descrição",
+                "Parcela": info_parcela, 
+                "Responsavel": responsavel, 
+                "Status": status
+            })
+            
+        df = pd.concat([df, pd.DataFrame(novas_linhas)], ignore_index=True)
         df.to_csv(ARQUIVO_DADOS, index=False)
-        st.success("Salvo com sucesso!")
+        if parcelas > 1:
+            st.success(f"Sucesso! Compra dividida em {parcelas}x. O sistema projetou os gastos até o mês {competencia_calculada} automaticamente!")
+        else:
+            st.success("Lançamento único salvo com sucesso!")
         st.rerun()
 
 # ---------------------------------------------------------
-# ABA OPEN FINANCE INTERATIVA (PRO GRID DE INSTITUIÇÕES)
+# ABA OPEN FINANCE
 # ---------------------------------------------------------
 with aba_openfinance:
     if st.session_state.of_step == "inicio":
         st.subheader("🔌 Hub de Integração Aberta (Open Finance)")
-        st.write("Selecione sua instituição financeira para ativar o mapeamento automático de extratos.")
+        st.write("Selecione sua instituição financeira na lista abaixo para ativar o mapeamento automático de extratos.")
         
-        # GRADE DE 8 BANCOS ESTILO BIG TECH (2 linhas de 4 colunas)
-        row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-        with row1_col1:
-            st.markdown('<div class="bank-card"><h4 style="color:#7C3AED;">💜 Nubank</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Nubank"):
-                st.session_state.of_banco, st.session_state.of_step = "Nubank", "auth_widget"
-                st.rerun()
-        with row1_col2:
-            st.markdown('<div class="bank-card"><h4 style="color:#EA580C;">🧡 Banco Inter</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Inter"):
-                st.session_state.of_banco, st.session_state.of_step = "Banco Inter", "auth_widget"
-                st.rerun()
-        with row1_col3:
-            st.markdown('<div class="bank-card"><h4 style="color:#1E3A8A;">💙 Itaú Unibanco</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Itaú"):
-                st.session_state.of_banco, st.session_state.of_step = "Itaú", "auth_widget"
-                st.rerun()
-        with row1_col4:
-            st.markdown('<div class="bank-card"><h4 style="color:#DC2626;">❤️ Bradesco</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Bradesco"):
-                st.session_state.of_banco, st.session_state.of_step = "Bradesco", "auth_widget"
-                st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
+        lista_bancos_completos = [
+            "Banco do Brasil", "Banco Inter", "Bradesco", "BTG Pactual", "C6 Bank", "Caixa Econômica Federal",
+            "Itaú Unibanco", "Mercado Pago", "Nubank", "PagBank", "PicPay", "Santander", "Sicoob", "Sicredi", "XP Investimentos"
+        ]
         
-        row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-        with row2_col1:
-            st.markdown('<div class="bank-card"><h4 style="color:#E11D48;">🔴 Santander</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Santander"):
-                st.session_state.of_banco, st.session_state.of_step = "Santander", "auth_widget"
-                st.rerun()
-        with row2_col2:
-            st.markdown('<div class="bank-card"><h4 style="color:#0284C7;">🔵 Caixa</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular Caixa"):
-                st.session_state.of_banco, st.session_state.of_step = "Caixa", "auth_widget"
-                st.rerun()
-        with row2_col3:
-            st.markdown('<div class="bank-card"><h4 style="color:#0F172A;">⚫ C6 Bank</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular C6 Bank"):
-                st.session_state.of_banco, st.session_state.of_step = "C6 Bank", "auth_widget"
-                st.rerun()
-        with row2_col4:
-            st.markdown('<div class="bank-card"><h4 style="color:#16A34A;">🟢 XP Investimentos</h4><p style="color:#64748B; font-size:0.8rem;">API Oficial Ativa</p></div>', unsafe_allow_html=True)
-            if st.button("Vincular XP"):
-                st.session_state.of_banco, st.session_state.of_step = "XP Investimentos", "auth_widget"
+        col_selecao, col_botao = st.columns([3, 1])
+        with col_selecao:
+            banco_escolhido = st.selectbox("Busque a sua Instituição Financeira:", lista_bancos_completos)
+        with col_botao:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            if st.button(f"🔗 Vincular Banco", type="primary", use_container_width=True):
+                st.session_state.of_banco = banco_escolhido
+                st.session_state.of_step = "auth_widget"
                 st.rerun()
 
         st.markdown("<br><hr style='border: 1px solid rgba(15,23,42,0.06);'><br>", unsafe_allow_html=True)
-        st.markdown("### 🔐 Entenda o Fluxo de Autorização Bancária (Padrão Pro de Segurança)")
+        st.markdown("### 🔐 Entenda o Fluxo de Autorização Bancária")
         col_step1, col_step2, col_step3 = st.columns(3)
-        with col_step1:
-            st.markdown('<div class="step-box"><h4><span class="step-num">1</span> Redirecionamento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">A plataforma abre uma janela segura criptografada conectada ao integrador oficial (Pluggy API). Você autoriza no ecossistema do seu próprio banco.</p></div>', unsafe_allow_html=True)
-        with col_step2:
-            st.markdown('<div class="step-box"><h4><span class="step-num">2</span> Consentimento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">Você aprova o compartilhamento de dados em <b>modo apenas leitura (Read-Only)</b> através do aplicativo oficial do banco. Senhas não são compartilhadas.</p></div>', unsafe_allow_html=True)
-        with col_step3:
-            st.markdown('<div class="step-box"><h4><span class="step-num">3</span> Tokenização</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">O banco emite uma chave criptografada (Token). Nosso robô lê os extratos e consolida os gráficos automaticamente a cada transação.</p></div>', unsafe_allow_html=True)
+        with col_step1: st.markdown('<div class="step-box"><h4><span class="step-num">1</span> Redirecionamento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">A plataforma abre uma janela segura criptografada. Você autoriza no ecossistema do seu banco.</p></div>', unsafe_allow_html=True)
+        with col_step2: st.markdown('<div class="step-box"><h4><span class="step-num">2</span> Consentimento</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">Você aprova o compartilhamento Read-Only. Senhas não são compartilhadas.</p></div>', unsafe_allow_html=True)
+        with col_step3: st.markdown('<div class="step-box"><h4><span class="step-num">3</span> Tokenização</h4><p style="color: #475569; font-size: 0.9rem; margin-top:10px;">O banco emite um Token. Nosso robô lê os extratos e consolida os gráficos automaticamente.</p></div>', unsafe_allow_html=True)
 
     elif st.session_state.of_step == "auth_widget":
         st.markdown(f"""
             <div class="secure-widget">
                 <h3 style="color:#4F46E5 !important; margin-bottom:5px;">🔒 Autorização de Leitura via Open Finance</h3>
-                <p style="color:#64748B; font-size:0.9rem;">Instituição Alvo: <b>{st.session_state.of_banco} S.A.</b></p>
+                <p style="color:#64748B; font-size:0.9rem;">Instituição Alvo: <b>{st.session_state.of_banco}</b></p>
                 <hr style="border-color: rgba(0,0,0,0.06); margin: 15px 0;">
-                <p style="font-size:0.95rem; font-weight:600;">Esta aplicação solicita acesso temporário para fins de conciliação de fluxo de caixa:</p>
+                <p style="font-size:0.95rem; font-weight:600;">Esta aplicação solicita acesso temporário para leitura de dados:</p>
                 <ul style="color:#475569; font-size:0.9rem; padding-left:20px; margin: 15px 0;">
-                    <li>Histórico detalhado de depósitos, despesas, PIX e transferências (90 dias)</li>
-                    <li>Saldos consolidados de contas correntes associadas</li>
+                    <li>Histórico detalhado de depósitos, despesas, PIX e transferências</li>
                     <li>Faturas e lançamentos futuros de cartões de crédito</li>
                 </ul>
                 <p style="color:#94A3B8; font-size:0.85rem; margin-bottom:20px;">
-                    🛡️ Criptografia AES-256 de ponta a ponta homologada pelo Banco Central. Modo Read-Only habilitado (impossível efetuar saques ou movimentações).
+                    🛡️ Criptografia AES-256 de ponta a ponta homologada pelo Banco Central.
                 </p>
             </div>
         """, unsafe_allow_html=True)
@@ -376,16 +298,13 @@ with aba_openfinance:
                 st.rerun()
 
     elif st.session_state.of_step == "mock_login_gateway":
-        # TELA INTERATIVA EXCLUSIVA DA VERSÃO 21: INTERFACE DE AUTENTICAÇÃO
         st.subheader(f"🔐 Portal de Autenticação Segura: {st.session_state.of_banco}")
-        st.write("Insira as credenciais de leitura da sua conta bancária para estabelecer a ponte criptografada.")
-        
         col_lg1, col_lg2 = st.columns(2)
         with col_lg1:
-            st.text_input("Número da Agência (4 dígitos)", value="1234")
-            st.text_input("Número da Conta com Dígito", value="56789-0")
+            st.text_input("Número da Agência (4 dígitos)", value="")
+            st.text_input("Número da Conta com Dígito", value="")
         with col_lg2:
-            st.info("💡 Ambiente de Demonstração Comercial: Você pode inserir qualquer número fictício nos campos ao lado para simular o processo real de integração com o cliente final.")
+            st.info("💡 Aviso: Para transição de ambiente (Real Data API), aguardando inserção das chaves Client_ID e Secret da integradora financeira (Ex: Pluggy).")
             
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔗 Confirmar Chave e Sincronizar", type="primary"):
@@ -405,29 +324,25 @@ with aba_openfinance:
         time.sleep(1.0)
         barra.progress(70)
         
-        status_text.text("Estruturando transações pendentes de Junho de 2026...")
+        status_text.text("Estruturando transações pendentes...")
         time.sleep(0.7)
         barra.progress(100)
         
-        # CORE FIX: Nome da variável 'linhas_banco' corrigido e unificado para evitar NameError
+        hoje_str = datetime.today().strftime("%Y-%m-%d")
+        comp_str = datetime.today().strftime("%Y-%m")
+        
         linhas_banco = pd.DataFrame([
             {
-                "ID": str(uuid.uuid4()), "Data": "2026-06-02", "Tipo": "Despesa",
+                "ID": str(uuid.uuid4()), "Data": hoje_str, "Competencia": comp_str, "Tipo": "Despesa",
                 "Categoria": "Transporte", "Subcategoria": "Importado", "Conta_Cartao": st.session_state.of_banco,
                 "Valor": 28.90, "Descricao": f"UBER TRIP - {st.session_state.of_banco.upper()}", "Parcela": "À vista", 
                 "Responsavel": "Gabriel", "Status": "Pago"
             },
             {
-                "ID": str(uuid.uuid4()), "Data": "2026-06-02", "Tipo": "Receita",
+                "ID": str(uuid.uuid4()), "Data": hoje_str, "Competencia": comp_str, "Tipo": "Receita",
                 "Categoria": "Vendas/Comissão", "Subcategoria": "Importado", "Conta_Cartao": st.session_state.of_banco,
                 "Valor": 350.00, "Descricao": f"PIX RECEBIDO - {st.session_state.of_banco.upper()}", "Parcela": "À vista", 
                 "Responsavel": "Gabriel", "Status": "Pago"
-            },
-            {
-                "ID": str(uuid.uuid4()), "Data": "2026-06-02", "Tipo": "Despesa",
-                "Categoria": "Alimentação", "Subcategoria": "Importado", "Conta_Cartao": st.session_state.of_banco,
-                "Valor": 45.50, "Descricao": f"IFOOD - {st.session_state.of_banco.upper()}", "Parcela": "À vista", 
-                "Responsavel": "Tainá", "Status": "Pago"
             }
         ])
         
@@ -435,7 +350,7 @@ with aba_openfinance:
         df.to_csv(ARQUIVO_DADOS, index=False)
         
         st.session_state.of_step = "inicio"
-        st.success(f"🎉 ESPETÁCULO! Conexão estabelecida com o {st.session_state.of_banco}. Os dados foram injetados com sucesso!")
+        st.success(f"🎉 ESPETÁCULO! Conexão estabelecida com o {st.session_state.of_banco}. Dados injetados com sucesso!")
         st.balloons()
         time.sleep(1.5)
         st.rerun()
@@ -501,15 +416,13 @@ with aba_importar:
                 for i in range(min(15, len(df_bruto))):
                     linha_str = " ".join([str(x).upper() for x in df_bruto.iloc[i].fillna("")]).upper()
                     if "DATA" in linha_str and ("RECEITA" in linha_str or "DESPESA" in linha_str):
-                        header_idx = i
-                        break
+                        header_idx = i; break
                 
                 if header_idx != -1:
                     nomes_colunas = []
                     for col_idx in range(len(df_bruto.columns)):
                         val_row2 = str(df_bruto.iloc[header_idx, col_idx]).strip().upper()
                         val_row1 = str(df_bruto.iloc[header_idx - 1, col_idx]).strip().upper() if header_idx > 0 else ""
-                        
                         if val_row2 not in ["", "NAN", "NONE", "VAZIO", "-"]: nome_final = val_row2
                         elif val_row1 not in ["", "NAN", "NONE", "VAZIO", "-"]: nome_final = val_row1
                         else: nome_final = f"COL_{col_idx}"
@@ -527,7 +440,6 @@ with aba_importar:
                     col_ano = next((c for c in nomes_colunas if "ANO" in c), None)
                     
                     mapping_responsaveis = {"GABRIEL": "Gabriel", "THATA": "Tainá", "NÓS": "Casa/Conjunto", "PAI/MÃE": "Pais"}
-                    
                     def limpa_valor(v):
                         if pd.isna(v): return 0.0
                         vs = str(v).upper().replace('R$', '').strip()
@@ -544,7 +456,6 @@ with aba_importar:
                         data_orig = str(row[col_data]).strip() if col_data else ""
                         if data_orig in ["", "nan", "NaT", "None", "VAZIO"]: continue
                         
-                        # CORE FIX: Nome das funções 'limpa_valor' unificado em toda a estrutura
                         v_rec = limpa_valor(row[col_rec]) if col_rec else 0.0
                         v_desp = limpa_valor(row[col_desp]) if col_desp else 0.0
                         tipo_linha = "Receita" if v_rec > 0 else "Despesa"
@@ -558,8 +469,8 @@ with aba_importar:
                         
                         def registrar(val_item, resp_item):
                             novos_dados.append({
-                                "ID": str(uuid.uuid4()), "Data": f"2026-{mes_num_alvo}-01", "Tipo": tipo_linha,
-                                "Categoria": str(row[col_cat]).title() if col_cat and pd.notna(row[col_cat]) else "Importado",
+                                "ID": str(uuid.uuid4()), "Data": f"2026-{mes_num_alvo}-01", "Competencia": f"2026-{mes_num_alvo}",
+                                "Tipo": tipo_linha, "Categoria": str(row[col_cat]).title() if col_cat and pd.notna(row[col_cat]) else "Importado",
                                 "Subcategoria": "Importado",
                                 "Conta_Cartao": str(row[col_banco]).strip() if col_banco and pd.notna(row[col_banco]) and str(row[col_banco]).strip() != "-" else "Dinheiro/Pix",
                                 "Valor": val_item, "Descricao": str(row[col_desc]).strip() if col_desc and pd.notna(row[col_desc]) else "Sem descrição",
