@@ -10,8 +10,8 @@ from supabase import create_client, Client
 # ========================================================
 # 1. CREDENCIAIS DO BANCO DE DADOS (SUPABASE)
 # ========================================================
-SUPABASE_URL = "COLE_SUA_URL_AQUI"
-SUPABASE_KEY = "COLE_SUA_CHAVE_ANON_AQUI"
+SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
 # Inicializa a conexão com a nuvem
 @st.cache_resource
