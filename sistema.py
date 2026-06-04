@@ -33,7 +33,7 @@ else:
     modelo_ia = None
 
 # ========================================================
-# 2. CONFIGURAÇÃO VISUAL
+# 2. CONFIGURAÇÃO VISUAL E CSS
 # ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
@@ -41,21 +41,21 @@ st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #F8FAFC !important; color: #0F172A !important; }
-        h1, h2, h3 { font-weight: 800 !important; letter-spacing: -1px !important; color: #0F172A !important; }
+        h1, h2, h3, h4 { font-weight: 800 !important; letter-spacing: -0.5px !important; color: #0F172A !important; }
         .title-gradient { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px; }
-        div[data-baseweb="input"], .stSelectbox div { border-radius: 10px !important; }
-        div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px; }
+        div[data-baseweb="input"], .stSelectbox div { border-radius: 8px !important; }
+        div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 8px; padding: 10px; }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
         .status-box { padding: 20px; border-radius: 10px; background-color: #ECFDF5; border: 1px solid #10B981; color: #065F46; font-weight: bold; text-align: center; }
+        hr { margin-top: 15px; margin-bottom: 15px; border: 0; border-top: 1px solid #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO E VARIÁVEIS DE SESSÃO
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
-
 if "orcamentos" not in st.session_state:
     st.session_state.orcamentos = {}
 
@@ -92,24 +92,19 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E LISTAS INTELIGENTES
+# 4. FUNÇÕES BASE E LISTAS
 # ========================================================
 def carregar_dados():
     try:
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df = pd.DataFrame(response.data)
-            # Adicionado o mapeamento do novo campo Origem_Destino
             df = df.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
-            # Se a coluna origem_destino existir no banco com valores nulos, preenchemos com vazio
-            if "Origem_Destino" in df.columns:
-                df["Origem_Destino"] = df["Origem_Destino"].fillna("")
-            else:
-                df["Origem_Destino"] = ""
+            if "Origem_Destino" in df.columns: df["Origem_Destino"] = df["Origem_Destino"].fillna("")
+            else: df["Origem_Destino"] = ""
             return df
-    except Exception as e:
-        pass
+    except: pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
 df = carregar_dados()
@@ -117,11 +112,10 @@ df = carregar_dados()
 def obter_opcoes(coluna, lista_base):
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
-        lista_completa = list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]]))
-        return sorted(lista_completa)
+        return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
 
-LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
+LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Dinheiro/Pix"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 # ========================================================
@@ -144,14 +138,12 @@ aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
-        
         with dash_mensal:
             col_filtro1, _ = st.columns(2)
             with col_filtro1:
                 mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
             
             df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
-            
             t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
             t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
@@ -170,10 +162,9 @@ with aba_dashboard:
                 with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
         
         with dash_anual:
-            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal (Receitas vs Despesas vs Investimentos)", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
+            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
             
         with dash_metas:
-            st.markdown("### Controle de Gastos por Categoria")
             c_meta1, c_meta2 = st.columns([1, 2])
             with c_meta1:
                 with st.container(border=True):
@@ -189,8 +180,7 @@ with aba_dashboard:
                 mes_atual_metas = datetime.now().strftime("%Y-%m")
                 st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
                 df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
-                if not st.session_state.orcamentos:
-                    st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
+                if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
                         gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
@@ -203,57 +193,76 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS
+# 7. LANÇAMENTOS (NOVO DESIGN PREMIUM)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar (Editar/Apagar)"])
     
     with aba_manual:
-        st.subheader("Registrar Movimentação")
+        st.markdown("### 📝 Registrar Nova Movimentação")
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            tipo = st.selectbox("Tipo", ["Despesa", "Receita", "Investimento"])
-            data_compra = st.date_input("Data do Ocorrido")
-            valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+        # BLOCO 1: O Quê e Quanto
+        with st.container(border=True):
+            st.markdown("#### 1. Valores e Datas")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                tipo = st.selectbox("Tipo da Movimentação", ["Despesa", "Receita", "Investimento"])
+            with c2:
+                valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+            with c3:
+                data_compra = st.date_input("Data do Ocorrido")
+
+        # BLOCO 2: Classificação
+        with st.container(border=True):
+            st.markdown("#### 2. Classificação")
+            c4, c5, c6 = st.columns(3)
+            with c4:
+                opcoes_cat = obter_opcoes("Categoria", LISTA_CATEGORIAS) + ["➕ Nova Categoria..."]
+                cat_sel = st.selectbox("Categoria", opcoes_cat)
+                categoria = st.text_input("Nome da Nova Categoria:") if cat_sel == "➕ Nova Categoria..." else cat_sel
+            with c5:
+                opcoes_conta = obter_opcoes("Conta_Cartao", LISTA_BANCOS) + ["➕ Nova Conta..."]
+                conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
+                conta_cartao = st.text_input("Nome da Nova Conta:") if conta_sel == "➕ Nova Conta..." else conta_sel
+            with c6:
+                # O campo Origem_Destino agora tem inteligência e memória!
+                opcoes_orig = obter_opcoes("Origem_Destino", ["Supermercado", "Pix", "Empresa"]) + ["➕ Nova Origem/Destino..."]
+                orig_sel = st.selectbox("Origem / Destino (Ex: Estabelecimento)", opcoes_orig)
+                origem_destino = st.text_input("Nome da Nova Origem/Destino:") if orig_sel == "➕ Nova Origem/Destino..." else orig_sel
+
+        # BLOCO 3: Detalhes e Frequência
+        with st.container(border=True):
+            st.markdown("#### 3. Detalhes Adicionais")
+            c7, c8, c9 = st.columns(3)
+            with c7:
+                opcoes_resp = obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]) + ["➕ Novo Responsável..."]
+                resp_sel = st.selectbox("Responsável (Quem paga/pagou)", opcoes_resp)
+                responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
+            with c8:
+                descricao = st.text_input("Descrição Resumida (Ex: Compras do mês)")
+            with c9:
+                mes_fatura = st.date_input("Mês da Competência (Fatura)")
+                
             st.markdown("---")
-            modo_lancamento = st.radio("Frequência:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"])
+            # Frequência alinhada em linha horizontal para não quebrar o layout
+            modo_lancamento = st.radio("Frequência de Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
             
-        with col2:
-            opcoes_cat = obter_opcoes("Categoria", LISTA_CATEGORIAS) + ["➕ Nova Categoria..."]
-            cat_sel = st.selectbox("Categoria", opcoes_cat)
-            categoria = st.text_input("Digite a Nova Categoria:") if cat_sel == "➕ Nova Categoria..." else cat_sel
+            if modo_lancamento == "Parcelado": 
+                parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
+            elif modo_lancamento == "Assinatura Mensal": 
+                parcelas = st.number_input("Projetar por quantos meses no futuro?", min_value=2, max_value=60, value=12)
+            else: 
+                parcelas = 1
 
-            opcoes_conta = obter_opcoes("Conta_Cartao", LISTA_BANCOS) + ["➕ Nova Conta..."]
-            conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
-            conta_cartao = st.text_input("Digite a Nova Conta:") if conta_sel == "➕ Nova Conta..." else conta_sel
-
-            descricao = st.text_input("Descrição Resumida (Ex: Compras do mês)")
-            st.markdown("---")
-            
-            if modo_lancamento == "Parcelado": parcelas = st.number_input("Parcelas", min_value=2, max_value=120, value=2)
-            elif modo_lancamento == "Assinatura Mensal": parcelas = st.number_input("Projetar Meses", min_value=2, max_value=60, value=12)
-            else: parcelas = 1
-
-        with col3:
-            opcoes_resp = obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]) + ["➕ Novo Responsável..."]
-            resp_sel = st.selectbox("Responsável (Quem deve pagar/pagou)", opcoes_resp)
-            responsavel = st.text_input("Digite o Novo Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
-
-            # NOVO CAMPO: ORIGEM/DESTINO
-            origem_destino = st.text_input("Origem/Destino (Ex: Supermercado, Santa Ilha)")
-
-            mes_fatura = st.date_input("Mês da Competência")
-
-        if st.button("💾 Gravar no Sistema", type="primary", use_container_width=True):
+        # Botão Full Width abaixo dos containers
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and conta_cartao and responsavel:
                 novas_linhas = []
                 valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
                 for i in range(parcelas):
                     m = mes_fatura.month - 1 + i
                     comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
-                    
-                    # Garantir que Origem_Destino não seja None
                     origem_segura = origem_destino if origem_destino else ""
 
                     novas_linhas.append({
@@ -268,18 +277,16 @@ with aba_lancamentos:
                         "descricao": descricao, 
                         "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", 
                         "responsavel": responsavel,
-                        "origem_destino": origem_segura, # Campo Novo Inserido no BD
+                        "origem_destino": origem_segura,
                         "status": "Pago" if i == 0 else "Pendente"
                     })
-                
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("✅ Lançamento salvo!")
-                    time.sleep(1)
+                    st.success("✅ O lançamento foi registrado e sincronizado no banco de dados!")
+                    time.sleep(1.5)
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}. Verifique se você criou a coluna 'origem_destino' no Supabase.")
-            else: st.warning("Preencha todos os dados base.")
+                except Exception as e: st.error(f"Erro ao salvar: {e}")
+            else: st.warning("⚠️ Preencha pelo menos o Valor Total, Categoria e Conta para prosseguir.")
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
@@ -293,75 +300,68 @@ with aba_lancamentos:
             col_desc = c2.selectbox("Coluna Descrição?", df_fatura.columns)
             col_valor = c3.selectbox("Coluna Valor?", df_fatura.columns)
             df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
-            if st.button("🚀 Salvar Lançamentos", type="primary"):
+            if st.button("🚀 Salvar Fatura", type="primary"):
                 novas_linhas = []
                 for index, row in df_editado.iterrows():
                     try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
                     if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "origem_destino": "", "status": "Pago"})
                 if novas_linhas:
-                    try:
-                        supabase.table("lancamentos").insert(novas_linhas).execute()
-                        st.success("Importado!")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+                    supabase.table("lancamentos").insert(novas_linhas).execute()
+                    st.success("Fatura importada com sucesso!")
+                    time.sleep(1)
+                    st.rerun()
 
     with aba_gerenciar:
-        st.subheader("Gerenciar Movimentações")
+        st.subheader("Gerenciar Movimentações (Editar/Apagar)")
         if df.empty:
-            st.info("Você ainda não tem lançamentos salvos no banco de dados.")
+            st.info("Nenhum lançamento encontrado.")
         else:
-            # Tabela Visual para ajudar a achar o registro (Agora com Origem_Destino)
             st.dataframe(df[["Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].sort_values("Data", ascending=False), use_container_width=True, hide_index=True)
-            
             st.markdown("---")
-            st.write("### 🛠️ Editar ou Excluir um Registro")
-            
             opcoes_edit = {row["ID"]: f"{row['Data']} | {row['Descricao']} | R$ {row['Valor']:.2f}" for idx, row in df.iterrows()}
-            id_selecionado = st.selectbox("Selecione o Lançamento que deseja alterar:", options=list(opcoes_edit.keys()), format_func=lambda x: opcoes_edit[x])
+            id_selecionado = st.selectbox("Selecione o Lançamento para Alterar:", options=list(opcoes_edit.keys()), format_func=lambda x: opcoes_edit[x])
             
             if id_selecionado:
                 linha_edit = df[df["ID"] == id_selecionado].iloc[0]
-                
-                c_ed1, c_ed2, c_ed3 = st.columns(3)
-                with c_ed1:
-                    novo_tipo = st.selectbox("Tipo", ["Despesa", "Receita", "Investimento"], index=["Despesa", "Receita", "Investimento"].index(linha_edit["Tipo"]) if linha_edit["Tipo"] in ["Despesa", "Receita", "Investimento"] else 0, key="ed_tipo")
-                    try: data_atual = pd.to_datetime(linha_edit["Data"])
-                    except: data_atual = datetime.now()
-                    nova_data = st.date_input("Data", data_atual, key="ed_data")
-                    novo_valor = st.number_input("Valor (R$)", value=float(linha_edit["Valor"]), min_value=0.0, key="ed_valor")
-                with c_ed2:
-                    nova_cat = st.text_input("Categoria", value=str(linha_edit["Categoria"]), key="ed_cat")
-                    nova_conta = st.text_input("Conta / Cartão", value=str(linha_edit["Conta_Cartao"]), key="ed_conta")
-                    nova_desc = st.text_input("Descrição", value=str(linha_edit["Descricao"]), key="ed_desc")
-                with c_ed3:
-                    novo_resp = st.text_input("Responsável", value=str(linha_edit["Responsavel"]), key="ed_resp")
-                    novo_origem = st.text_input("Origem/Destino", value=str(linha_edit.get("Origem_Destino", "")), key="ed_origem")
-                    nova_comp = st.text_input("Competência (YYYY-MM)", value=str(linha_edit["Competencia"]), key="ed_comp")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                c_btn1, c_btn2 = st.columns(2)
-                with c_btn1:
-                    if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("✅ Atualizado com sucesso!")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e: st.error(f"Erro ao atualizar: {e}")
-                with c_btn2:
-                    if st.button("🗑️ Apagar Registro", use_container_width=True):
-                        try:
-                            supabase.table("lancamentos").delete().eq("id", id_selecionado).execute()
-                            st.error("🗑️ Registro apagado para sempre!")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e: st.error(f"Erro ao apagar: {e}")
+                with st.container(border=True):
+                    c_ed1, c_ed2, c_ed3 = st.columns(3)
+                    with c_ed1:
+                        novo_tipo = st.selectbox("Tipo", ["Despesa", "Receita", "Investimento"], index=["Despesa", "Receita", "Investimento"].index(linha_edit["Tipo"]) if linha_edit["Tipo"] in ["Despesa", "Receita", "Investimento"] else 0, key="ed_tipo")
+                        try: data_atual = pd.to_datetime(linha_edit["Data"])
+                        except: data_atual = datetime.now()
+                        nova_data = st.date_input("Data", data_atual, key="ed_data")
+                        novo_valor = st.number_input("Valor (R$)", value=float(linha_edit["Valor"]), min_value=0.0, key="ed_valor")
+                    with c_ed2:
+                        nova_cat = text_cat = st.text_input("Categoria", value=str(linha_edit["Categoria"]), key="ed_cat")
+                        nova_conta = st.text_input("Conta / Cartão", value=str(linha_edit["Conta_Cartao"]), key="ed_conta")
+                        nova_desc = st.text_input("Descrição", value=str(linha_edit["Descricao"]), key="ed_desc")
+                    with c_ed3:
+                        novo_resp = st.text_input("Responsável", value=str(linha_edit["Responsavel"]), key="ed_resp")
+                        novo_origem = st.text_input("Origem/Destino", value=str(linha_edit.get("Origem_Destino", "")), key="ed_origem")
+                        nova_comp = st.text_input("Competência (YYYY-MM)", value=str(linha_edit["Competencia"]), key="ed_comp")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    c_btn1, c_btn2 = st.columns(2)
+                    with c_btn1:
+                        if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
+                            try:
+                                supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
+                                st.success("✅ Atualizado com sucesso!")
+                                time.sleep(1)
+                                st.rerun()
+                            except: st.error("Erro ao atualizar.")
+                    with c_btn2:
+                        if st.button("🗑️ Apagar Permanentemente", use_container_width=True):
+                            try:
+                                supabase.table("lancamentos").delete().eq("id", id_selecionado).execute()
+                                st.error("🗑️ Registro apagado!")
+                                time.sleep(1)
+                                st.rerun()
+                            except: st.error("Erro ao apagar.")
 
 # ========================================================
-# 8. ASSISTENTE IA
+# 8. ASSISTENTE IA E 9. OPEN FINANCE
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
@@ -387,29 +387,19 @@ with aba_assistente:
                                 st.toast("✅ Registrado pela IA!")
                     except: st.error("Erro de IA.")
 
-# ========================================================
-# 9. OPEN FINANCE
-# ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.info("💡 **Aviso do Sistema:** Devido a restrições de segurança de iframes nos navegadores modernos, a janela nativa da Pluggy foi contornada neste ambiente de desenvolvimento para não bloquearmos o progresso.")
-    
-    if "banco_conectado" not in st.session_state:
-        st.session_state.banco_conectado = False
-
+    if "banco_conectado" not in st.session_state: st.session_state.banco_conectado = False
     if not st.session_state.banco_conectado:
         st.write("Clique abaixo para simular uma conexão bem-sucedida e destravar as próximas funcionalidades.")
         if st.button("🚀 Simular Conexão (Bypass)", type="primary"):
-            with st.spinner("Simulando comunicação criptografada..."):
-                time.sleep(2)
+            with st.spinner("Simulando comunicação..."):
+                time.sleep(1)
                 st.session_state.banco_conectado = True
                 st.session_state.item_id_simulado = f"item_sandbox_{int(time.time())}"
                 st.rerun()
     else:
-        st.markdown(f"<div class='status-box'>🎉 MÁGICA CONCLUÍDA!<br><br>O banco foi conectado com sucesso via API.<br>Item ID: {st.session_state.item_id_simulado}</div>", unsafe_allow_html=True)
-        st.write("")
-        st.write("Agora que o sistema backend possui a autorização, podemos puxar as movimentações ou focar no Dashboard de Metas.")
-        
+        st.markdown(f"<div class='status-box'>🎉 MÁGICA CONCLUÍDA!<br><br>Item ID: {st.session_state.item_id_simulado}</div>", unsafe_allow_html=True)
         if st.button("🔴 Desconectar Conta"):
             st.session_state.banco_conectado = False
             st.rerun()
