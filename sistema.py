@@ -8,7 +8,6 @@ import requests
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
-import streamlit.components.v1 as components
 
 # ========================================================
 # 1. CREDENCIAIS BASE
@@ -100,12 +99,18 @@ def carregar_dados():
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df = pd.DataFrame(response.data)
-            # Garantir que a coluna 'id' seja mapeada corretamente
-            df = df.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status"})
+            # Adicionado o mapeamento do novo campo Origem_Destino
+            df = df.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
+            # Se a coluna origem_destino existir no banco com valores nulos, preenchemos com vazio
+            if "Origem_Destino" in df.columns:
+                df["Origem_Destino"] = df["Origem_Destino"].fillna("")
+            else:
+                df["Origem_Destino"] = ""
             return df
-    except: pass
-    return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"])
+    except Exception as e:
+        pass
+    return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
 df = carregar_dados()
 
@@ -198,14 +203,13 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS (INCLUI EDIÇÃO E EXCLUSÃO)
+# 7. LANÇAMENTOS
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar (Editar/Apagar)"])
     
     with aba_manual:
         st.subheader("Registrar Movimentação")
-        st.write("Dica: Selecione '➕ Novo(a)...' nas listas abaixo para adicionar seus próprios nomes.")
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -224,7 +228,7 @@ with aba_lancamentos:
             conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
             conta_cartao = st.text_input("Digite a Nova Conta:") if conta_sel == "➕ Nova Conta..." else conta_sel
 
-            descricao = st.text_input("Descrição")
+            descricao = st.text_input("Descrição Resumida (Ex: Compras do mês)")
             st.markdown("---")
             
             if modo_lancamento == "Parcelado": parcelas = st.number_input("Parcelas", min_value=2, max_value=120, value=2)
@@ -233,8 +237,11 @@ with aba_lancamentos:
 
         with col3:
             opcoes_resp = obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]) + ["➕ Novo Responsável..."]
-            resp_sel = st.selectbox("Responsável", opcoes_resp)
+            resp_sel = st.selectbox("Responsável (Quem deve pagar/pagou)", opcoes_resp)
             responsavel = st.text_input("Digite o Novo Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
+
+            # NOVO CAMPO: ORIGEM/DESTINO
+            origem_destino = st.text_input("Origem/Destino (Ex: Supermercado, Santa Ilha)")
 
             mes_fatura = st.date_input("Mês da Competência")
 
@@ -245,12 +252,34 @@ with aba_lancamentos:
                 for i in range(parcelas):
                     m = mes_fatura.month - 1 + i
                     comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "status": "Pago" if i == 0 else "Pendente"})
-                supabase.table("lancamentos").insert(novas_linhas).execute()
-                st.success("✅ Lançamento salvo!")
-                time.sleep(1)
-                st.rerun()
-            else: st.warning("Preencha todos os dados.")
+                    
+                    # Garantir que Origem_Destino não seja None
+                    origem_segura = origem_destino if origem_destino else ""
+
+                    novas_linhas.append({
+                        "user_email": st.session_state.user_email, 
+                        "data_compra": data_compra.strftime("%Y-%m-%d"), 
+                        "competencia": comp, 
+                        "tipo": tipo, 
+                        "categoria": categoria, 
+                        "subcategoria": "Geral", 
+                        "conta_cartao": conta_cartao, 
+                        "valor": float(round(valor_por_mes, 2)), 
+                        "descricao": descricao, 
+                        "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", 
+                        "responsavel": responsavel,
+                        "origem_destino": origem_segura, # Campo Novo Inserido no BD
+                        "status": "Pago" if i == 0 else "Pendente"
+                    })
+                
+                try:
+                    supabase.table("lancamentos").insert(novas_linhas).execute()
+                    st.success("✅ Lançamento salvo!")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}. Verifique se você criou a coluna 'origem_destino' no Supabase.")
+            else: st.warning("Preencha todos os dados base.")
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
@@ -269,26 +298,27 @@ with aba_lancamentos:
                 for index, row in df_editado.iterrows():
                     try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "status": "Pago"})
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "origem_destino": "", "status": "Pago"})
                 if novas_linhas:
-                    supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("Importado!")
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        supabase.table("lancamentos").insert(novas_linhas).execute()
+                        st.success("Importado!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
 
-    # O NOVO MÓDULO DE EDIÇÃO!
     with aba_gerenciar:
         st.subheader("Gerenciar Movimentações")
         if df.empty:
             st.info("Você ainda não tem lançamentos salvos no banco de dados.")
         else:
-            # Tabela Visual para ajudar a achar o registro
-            st.dataframe(df[["Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]].sort_values("Data", ascending=False), use_container_width=True, hide_index=True)
+            # Tabela Visual para ajudar a achar o registro (Agora com Origem_Destino)
+            st.dataframe(df[["Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].sort_values("Data", ascending=False), use_container_width=True, hide_index=True)
             
             st.markdown("---")
             st.write("### 🛠️ Editar ou Excluir um Registro")
             
-            # Cria a lista de opções formatadas bonitinhas
             opcoes_edit = {row["ID"]: f"{row['Data']} | {row['Descricao']} | R$ {row['Valor']:.2f}" for idx, row in df.iterrows()}
             id_selecionado = st.selectbox("Selecione o Lançamento que deseja alterar:", options=list(opcoes_edit.keys()), format_func=lambda x: opcoes_edit[x])
             
@@ -308,6 +338,7 @@ with aba_lancamentos:
                     nova_desc = st.text_input("Descrição", value=str(linha_edit["Descricao"]), key="ed_desc")
                 with c_ed3:
                     novo_resp = st.text_input("Responsável", value=str(linha_edit["Responsavel"]), key="ed_resp")
+                    novo_origem = st.text_input("Origem/Destino", value=str(linha_edit.get("Origem_Destino", "")), key="ed_origem")
                     nova_comp = st.text_input("Competência (YYYY-MM)", value=str(linha_edit["Competencia"]), key="ed_comp")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -315,7 +346,7 @@ with aba_lancamentos:
                 with c_btn1:
                     if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
                         try:
-                            supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "competencia": nova_comp}).eq("id", id_selecionado).execute()
+                            supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
                             st.success("✅ Atualizado com sucesso!")
                             time.sleep(1)
                             st.rerun()
@@ -352,7 +383,7 @@ with aba_assistente:
                         if "```json" in texto_resposta:
                             dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
-                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
+                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "origem_destino": "", "status": "Pago"}).execute()
                                 st.toast("✅ Registrado pela IA!")
                     except: st.error("Erro de IA.")
 
@@ -361,19 +392,24 @@ with aba_assistente:
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    if "banco_conectado" not in st.session_state: st.session_state.banco_conectado = False
+    st.info("💡 **Aviso do Sistema:** Devido a restrições de segurança de iframes nos navegadores modernos, a janela nativa da Pluggy foi contornada neste ambiente de desenvolvimento para não bloquearmos o progresso.")
+    
+    if "banco_conectado" not in st.session_state:
+        st.session_state.banco_conectado = False
 
     if not st.session_state.banco_conectado:
         st.write("Clique abaixo para simular uma conexão bem-sucedida e destravar as próximas funcionalidades.")
         if st.button("🚀 Simular Conexão (Bypass)", type="primary"):
             with st.spinner("Simulando comunicação criptografada..."):
-                time.sleep(1)
+                time.sleep(2)
                 st.session_state.banco_conectado = True
                 st.session_state.item_id_simulado = f"item_sandbox_{int(time.time())}"
                 st.rerun()
     else:
         st.markdown(f"<div class='status-box'>🎉 MÁGICA CONCLUÍDA!<br><br>O banco foi conectado com sucesso via API.<br>Item ID: {st.session_state.item_id_simulado}</div>", unsafe_allow_html=True)
         st.write("")
+        st.write("Agora que o sistema backend possui a autorização, podemos puxar as movimentações ou focar no Dashboard de Metas.")
+        
         if st.button("🔴 Desconectar Conta"):
             st.session_state.banco_conectado = False
             st.rerun()
