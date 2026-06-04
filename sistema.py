@@ -56,7 +56,6 @@ if not st.session_state.user_email:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Usando o container nativo do Streamlit (sem bugs do quadro branco)
         with st.container(border=True):
             aba_login, aba_registro = st.tabs(["🔒 Entrar", "✨ Criar Conta"])
             
@@ -71,32 +70,27 @@ if not st.session_state.user_email:
                     except Exception as e:
                         st.error("E-mail ou senha incorretos. Tente novamente.")
                         
-         # --- CÓDIGO DA ABA DE REGISTRO (LOGIN DIRETO) ---
             with aba_registro:
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
                 
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
                     try:
-                        # Regista o utilizador no Supabase
                         res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                        
-                        # Mensagem de sucesso sem pedir confirmação de e-mail
                         st.success("✅ Conta criada com sucesso! Pode clicar na aba '🔒 Entrar' ao lado e fazer o seu login agora mesmo.")
                     except Exception as e:
                         st.error("Erro ao criar conta. Verifique os dados inseridos.")
     
-    st.stop() # Bloqueia o resto do código até o usuário logar!
+    st.stop()
 
 # ========================================================
-# 4. FUNÇÕES DE BANCO DE DADOS (MULTI-TENANT)
+# 4. FUNÇÕES DE BANCO DE DADOS E LISTAS
 # ========================================================
 def carregar_dados():
     try:
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df = pd.DataFrame(response.data)
-            # Renomeia para o padrão antigo do visual
             df = df.rename(columns={
                 "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria",
                 "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor",
@@ -116,6 +110,9 @@ def obter_opcoes(coluna, lista_base):
         existentes = df[coluna].dropna().astype(str).unique().tolist()
         return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
+
+LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Santander", "Banco do Brasil", "C6 Bank", "Caixa Econômica", "Sicoob", "Sicredi", "BTG Pactual", "Dinheiro/Pix", "Nubank (Final 1234)", "Mastercard (Final 5678)"]
+LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Impostos", "Investimentos", "Outros"]
 
 # ========================================================
 # 5. HEADER DO USUÁRIO LOGADO
@@ -157,45 +154,103 @@ with aba_dashboard:
     else:
         st.info("O Dashboard está aguardando lançamentos.")
 
-# --- LANÇAMENTOS (SALVANDO NA NUVEM) ---
+# --- LANÇAMENTOS (MANUAL E IMPORTAÇÃO) ---
 with aba_lancamentos:
-    st.subheader("Registrar Movimentação")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
-        data_lancamento = st.date_input("Data da Compra")
-        mes_fatura = st.date_input("Mês da Fatura")
-        valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
-    with col2:
-        parcelas = st.number_input("Parcelas", min_value=1, max_value=120, value=1)
-        categoria = st.selectbox("Categoria", obter_opcoes("Categoria", ["Alimentação", "Transporte", "Moradia", "Salário"]))
-    with col3:
-        conta_cartao = st.selectbox("Conta", obter_opcoes("Conta_Cartao", ["Nubank", "Inter", "Pix"]))
-        descricao = st.text_input("Descrição")
+    aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
+    
+    with aba_manual:
+        st.subheader("Registrar Movimentação Avançada")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
+            data_compra = st.date_input("Data da Compra")
+            valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
+            
+            st.markdown("---")
+            modo_lancamento = st.radio("Como é este lançamento?", ["Único (À vista)", "Parcelado", "Assinatura Mensal (Recorrente)"])
+            
+        with col2:
+            categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+            conta_cartao = st.selectbox("Conta / Cartão", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
+            descricao = st.text_input("Descrição (Ex: Netflix, iFood)")
+            
+            st.markdown("---")
+            if modo_lancamento == "Parcelado":
+                parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
+            elif modo_lancamento == "Assinatura Mensal (Recorrente)":
+                parcelas = st.number_input("Projetar por quantos meses?", min_value=2, max_value=60, value=12)
+            else:
+                parcelas = 1
+                
+        with col3:
+            responsavel = st.selectbox("Dono do Gasto (Responsável)", obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]))
+            mes_fatura = st.date_input("Mês da 1ª Fatura/Cobrança")
 
-    if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
-        novas_linhas = []
-        valor_parc = valor_total / parcelas
-        for i in range(parcelas):
-            m = mes_fatura.month - 1 + i
-            y = mes_fatura.year + (m // 12)
-            comp = f"{y}-{(m % 12) + 1:02d}"
+        if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
+            novas_linhas = []
             
-            # Formato exato do Banco de Dados Supabase (SQL)
-            novas_linhas.append({
-                "user_email": st.session_state.user_email,
-                "data_compra": data_lancamento.strftime("%Y-%m-%d"),
-                "competencia": comp,
-                "tipo": tipo, "categoria": categoria, "subcategoria": "Geral",
-                "conta_cartao": conta_cartao, "valor": float(round(valor_parc, 2)),
-                "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if parcelas > 1 else "À vista",
-                "responsavel": "Eu", "status": "Pago"
-            })
-            
-        supabase.table("lancamentos").insert(novas_linhas).execute()
-        st.success("Lançamento salvo diretamente na Nuvem Supabase!")
-        time.sleep(1.5)
-        st.rerun()
+            if modo_lancamento == "Parcelado":
+                valor_por_mes = valor_total / parcelas
+                info_parcela = lambda i: f"{i+1}/{parcelas}"
+            elif modo_lancamento == "Assinatura Mensal (Recorrente)":
+                valor_por_mes = valor_total 
+                info_parcela = lambda i: "Recorrente"
+            else:
+                valor_por_mes = valor_total
+                info_parcela = lambda i: "À vista"
+
+            for i in range(parcelas):
+                m = mes_fatura.month - 1 + i
+                y = mes_fatura.year + (m // 12)
+                comp = f"{y}-{(m % 12) + 1:02d}"
+                
+                novas_linhas.append({
+                    "user_email": st.session_state.user_email,
+                    "data_compra": data_compra.strftime("%Y-%m-%d"),
+                    "competencia": comp,
+                    "tipo": tipo, 
+                    "categoria": categoria, 
+                    "subcategoria": "Geral",
+                    "conta_cartao": conta_cartao, 
+                    "valor": float(round(valor_por_mes, 2)),
+                    "descricao": descricao, 
+                    "parcela": info_parcela(i),
+                    "responsavel": responsavel, 
+                    "status": "Pago" if i == 0 else "Pendente"
+                })
+                
+            try:
+                supabase.table("lancamentos").insert(novas_linhas).execute()
+                st.success(f"✅ Lançamento processado! {parcelas} registros foram criados no banco de dados.")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar na nuvem: {e}")
+
+    with aba_importar:
+        st.subheader("Integração Inteligente de Faturas")
+        st.write("Faça o upload da sua fatura. Você poderá **editar e categorizar** os dados antes de salvar definitivamente no sistema.")
+        
+        banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
+        arquivo = st.file_uploader("Anexe o arquivo da fatura aqui", type=["csv", "xlsx", "xls"])
+        
+        if arquivo is not None:
+            try:
+                if arquivo.name.endswith('.csv'):
+                    df_fatura = pd.read_csv(arquivo)
+                else:
+                    df_fatura = pd.read_excel(arquivo)
+                
+                st.success(f"Arquivo '{arquivo.name}' lido com sucesso! Edite os dados na tabela abaixo se necessário:")
+                
+                df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
+                
+                if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
+                    st.info("A função de gravar esses dados editados no Supabase será ativada no nosso próximo passo de programação!")
+                    
+            except Exception as e:
+                st.error("Não foi possível ler o arquivo. Certifique-se de que é uma fatura válida.")
 
 # --- OPEN FINANCE ---
 with aba_openfinance:
