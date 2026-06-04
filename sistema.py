@@ -191,7 +191,7 @@ with aba_dashboard:
             try:
                 pdf_bytes = gerar_pdf(df_dash, str(mes_selecionado))
                 st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro_{mes_selecionado}.pdf", mime="application/pdf", type="primary")
-            except: st.warning("Configurando o gerador de PDF nos bastidores...")
+            except: st.warning("Processando gerador de PDF...")
         
         with dash_anual:
             st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
@@ -273,14 +273,14 @@ with aba_lancamentos:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
-            if valor_total > 0 and categoria and conta_cartao and responsavel:
+            if valor_total > 0 and category := categoria and account := conta_cartao and owner := responsavel:
                 novas_linhas = []
                 valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
                 for i in range(parcelas):
                     m = mes_fatura.month - 1 + i
                     comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": category, "subcategoria": "Geral", "conta_cartao": account, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": owner, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("✅ Registrado com sucesso!")
@@ -355,15 +355,15 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (O NOVO "EFEITO PIERRE" ATIVADO)
+# 8. ASSISTENTE IA ("EFEITO PIERRE" TOTALMENTE PROTEGIDO)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital Financeiro")
-    st.write("Pergunte sobre seus gastos históricos, faturas, iFood, períodos específicos ou peça conselhos de economia!")
+    st.write("Pergunte sobre gastos, iFood, períodos específicos ou peça conselhos de economia!")
     
     if modelo_ia:
         if "mensagens_chat" not in st.session_state: 
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Eu sou o seu Mentor Financeiro com acesso em tempo real ao seu banco de dados. Pode me perguntar coisas como: 'Quanto gastei com iFood?' ou 'Qual meu saldo atual?'"}]
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Sou seu consultor estilo Pierre. Pergunte qualquer coisa sobre seu histórico!"}]
         
         for msg in st.session_state.mensagens_chat:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
@@ -374,62 +374,27 @@ with aba_assistente:
             with st.chat_message("user"): st.markdown(prompt)
             
             with st.chat_message("assistant"):
-                with st.spinner("Vasculhando suas movimentações bancárias..."):
+                with st.spinner("Analisando suas transações..."):
                     try:
-                        # Convertemos o banco de dados atualizado para texto legível para a IA ler!
-                        if not df.empty:
-                            historico_texto = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False)
-                        else:
-                            historico_texto = "Nenhuma movimentação registrada ainda."
+                        # Compactado em uma linha curta para evitar cortes e quebras de string literal no GitHub
+                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Sem lancamentos."
                         
-                        # Injetamos o prompt mestre e a base de dados
-                        contexto_mestre = f"""
-                        Você é um Inteligente e Sofisticado Mentor e Consultor Financeiro Pessoal de altíssimo nível, exatamente igual ao bot Pierre do WhatsApp.
-                        Você tem acesso completo ao banco de dados real de lançamentos do usuário abaixo:
+                        # Criamos a instrução de forma limpa, direta e blindada contra quebras de aspas
+                        prompt_seguro = f"Atue como o bot financeiro Pierre. Base de dados: \n{hist_txt}\n Pergunta do usuario: {prompt}"
                         
-                        ---
-                        BASE DE DADOS EM TEMPO REAL:
-                        {historico_texto}
-                        ---
-                        
-                        REGRAS DE RESPOSTA:
-                        1. Responda de forma direta, clara, acolhedora e inteligente.
-                        2. Se o usuário perguntar por períodos (ex: 'do dia 1 ao dia 5'), filtre as datas na tabela e faça a soma matemática exata.
-                        3. Se ele perguntar por um estabelecimento ou palavra chave (ex: 'iFood' ou 'Supermercado'), busque esse nome na coluna 'Descricao', 'Origem_Destino' ou 'Categoria' e traga os cálculos precisos.
-                        4. Diga os valores em Reais (R$).
-                        5. Se o usuário pedir para registrar um gasto por texto, faça a sua análise normal e gere obrigatoriamente um JSON puro no final da resposta com a estrutura: ```json {{"acao": "registrar", "tipo": "Despesa", "valor": 50.00, "descricao": "Exemplo", "categoria": "Lazer", "conta": "Nubank"}} ```
-                        
-                        Pergunta do Usuário: "{prompt}"
-                        """
-                        
-                        resposta = modelo_ia.generate_content(contexto_mestre)
+                        resposta = modelo_ia.generate_content(prompt_seguro)
                         texto_resposta = resposta.text
                         
-                        # Exibe a resposta humana da IA na tela
                         st.markdown(texto_resposta.split("```json")[0].strip())
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta.split("
 ```json")[0].strip()})
                         
-                        # Executa o comando caso ele queira registrar um gasto conversando
                         if "```json" in texto_resposta:
                             dados_ia = json.loads(texto_resposta.split("
 ```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
-                                supabase.table("lancamentos").insert({
-                                    "user_email": st.session_state.user_email, 
-                                    "data_compra": datetime.now().strftime("%Y-%m-%d"), 
-                                    "competencia": datetime.now().strftime("%Y-%m"), 
-                                    "tipo": dados_ia.get("tipo", "Despesa"), 
-                                    "categoria": dados_ia.get("categoria", "Outros"), 
-                                    "conta_cartao": dados_ia.get("conta", "IA"), 
-                                    "valor": float(dados_ia.get("valor", 0.0)), 
-                                    "descricao": dados_ia.get("descricao", "Assistente"), 
-                                    "parcela": "À vista", 
-                                    "responsavel": "Gabriel", 
-                                    "origem_destino": dados_ia.get("descricao", ""),
-                                    "status": "Pago"
-                                }).execute()
-                                st.toast("✅ Registrado no sistema via comando de voz/texto!")
+                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Gabriel", "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
+                                st.toast("✅ Registrado com sucesso via IA!")
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
