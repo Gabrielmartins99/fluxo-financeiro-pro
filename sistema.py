@@ -152,6 +152,14 @@ def obter_connect_token(api_key):
     except: pass
     return None
 
+def listar_bancos_pluggy(api_key):
+    url = "https://api.pluggy.ai/connectors?countries=BR&types=PERSONAL_BANK&sandbox=true"
+    try:
+        res = requests.get(url, headers={"accept": "application/json", "X-API-KEY": api_key})
+        if res.status_code == 200: return res.json().get("results", [])
+    except: pass
+    return []
+
 # ========================================================
 # 5. HEADER DO USUÁRIO LOGADO
 # ========================================================
@@ -324,9 +332,11 @@ with aba_assistente:
                         st.markdown(texto_limpo)
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
                         
-                        if "```json" in texto_resposta:
+                        if "
+```json" in texto_resposta:
                             bloco_bruto = texto_resposta.split("```json")[1]
-                            bloco_json = bloco_bruto.split("```")[0].strip()
+                            bloco_json = bloco_bruto.split("
+```")[0].strip()
                             dados_ia = json.loads(bloco_json)
                             
                             if dados_ia.get("acao") == "registrar":
@@ -365,9 +375,13 @@ with aba_openfinance:
                 if chave_api:
                     connect_token = obter_connect_token(chave_api)
                     if connect_token:
-                        st.success("✅ Passe gerado com sucesso! O Widget de conexão carregou logo abaixo.")
+                        # Engenharia Mágica: O Python descobre o ID do Banco Simulador e esconde os outros!
+                        bancos = listar_bancos_pluggy(chave_api)
+                        sandbox_ids = [b["id"] for b in bancos if "pluggy" in b["name"].lower() and "meu" not in b["name"].lower()]
+                        filtro_js = f"connectorIds: {sandbox_ids}," if sandbox_ids else ""
                         
-                        # Código atualizado para a V2 do Pluggy Connect e altura ajustada para não "esmagar" a tela
+                        st.success("✅ Passe gerado! Sistema ativado no modo 'À Prova de Erros' (Listando apenas Bancos de Teste).")
+                        
                         html_code = f"""
                         <!DOCTYPE html>
                         <html lang="pt-BR">
@@ -384,12 +398,12 @@ with aba_openfinance:
 
                             <script>
                                 document.getElementById('abrir-pluggy').onclick = function() {{
-                                    // Esconde o botão para a janela do banco usar todo o espaço na tela
                                     this.style.display = 'none';
                                     
                                     const pluggyConnect = new PluggyConnect({{
                                         connectToken: '{connect_token}',
                                         includeSandbox: true,
+                                        {filtro_js} 
                                         onSuccess: (itemData) => {{
                                             alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nO seu Item ID é: " + itemData.item.id + "\\n\\nPode fechar esta caixa e voltar ao painel.");
                                         }},
@@ -404,7 +418,6 @@ with aba_openfinance:
                         </body>
                         </html>
                         """
-                        # A Mágica visual: aumentamos a altura para 700px para o Widget caber perfeitamente!
                         components.html(html_code, height=700)
                     else:
                         st.error("A Pluggy reconheceu as chaves, mas falhou ao gerar o Connect Token.")
