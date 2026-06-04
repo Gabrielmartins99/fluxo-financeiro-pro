@@ -230,7 +230,11 @@ with aba_lancamentos:
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
-        st.write("Faça o upload da sua fatura. Você poderá **editar e categorizar** os dados antes de salvar definitivamente no sistema.")
+        
+        # --- CAIXA DE INSTRUÇÃO PARA O USUÁRIO ---
+        st.info("**💡 Dica de Ouro:** Não use PDFs! Para uma leitura perfeita, vá no aplicativo do seu banco, acesse a sua fatura e procure pela opção **'Exportar'**. Escolha o formato **CSV** ou **Excel**. Todos os grandes bancos (Nubank, Inter, Itaú, etc.) possuem esta opção!")
+        
+        st.write("Faça o upload do arquivo gerado pelo banco. Você poderá **editar e categorizar** os dados antes de salvar definitivamente no sistema.")
         
         banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
         arquivo = st.file_uploader("Anexe o arquivo da fatura aqui", type=["csv", "xlsx", "xls"])
@@ -238,7 +242,7 @@ with aba_lancamentos:
         if arquivo is not None:
             try:
                 if arquivo.name.endswith('.csv'):
-                    df_fatura = pd.read_csv(arquivo)
+                    df_fatura = pd.read_csv(arquivo, sep=None, engine='python') 
                 else:
                     df_fatura = pd.read_excel(arquivo)
                 
@@ -247,10 +251,10 @@ with aba_lancamentos:
                 df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
                 
                 if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
-                    st.info("A função de gravar esses dados editados no Supabase será ativada no nosso próximo passo de programação!")
+                    st.warning("A função de gravar esses dados editados no Supabase será ativada no nosso próximo passo de programação!")
                     
             except Exception as e:
-                st.error("Não foi possível ler o arquivo. Certifique-se de que é uma fatura válida.")
+                st.error("Não foi possível ler o arquivo. Certifique-se de que é uma fatura exportada diretamente do banco (CSV/Excel) válida.")
 
 # --- OPEN FINANCE ---
 with aba_openfinance:
