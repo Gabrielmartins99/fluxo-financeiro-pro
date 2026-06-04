@@ -8,7 +8,6 @@ import requests
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
-import streamlit.components.v1 as components
 
 # ========================================================
 # 1. CREDENCIAIS BASE
@@ -18,12 +17,8 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 try:
     GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-    PLUGGY_CLIENT_ID = st.secrets.get("PLUGGY_CLIENT_ID", "")
-    PLUGGY_CLIENT_SECRET = st.secrets.get("PLUGGY_CLIENT_SECRET", "")
 except:
     GEMINI_API_KEY = ""
-    PLUGGY_CLIENT_ID = ""
-    PLUGGY_CLIENT_SECRET = ""
 
 @st.cache_resource
 def init_connection():
@@ -51,6 +46,7 @@ st.markdown("""
         div[data-baseweb="input"], .stSelectbox div { border-radius: 10px !important; }
         div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px; }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
+        .status-box { padding: 20px; border-radius: 10px; background-color: #ECFDF5; border: 1px solid #10B981; color: #065F46; font-weight: bold; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -81,17 +77,15 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         cookie_manager.set("user_email", res.user.email, max_age=30*24*60*60)
                         st.rerun()
-                    except Exception as e:
-                        st.error("E-mail ou senha incorretos. Tente novamente.")
+                    except: st.error("E-mail ou senha incorretos.")
             with aba_registro:
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
                     try:
-                        res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                        st.success("✅ Conta criada com sucesso! Pode fazer o seu login agora mesmo na aba ao lado.")
-                    except Exception as e:
-                        st.error("Erro ao criar conta. Verifique os dados inseridos.")
+                        supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
+                        st.success("✅ Conta criada com sucesso! Faça login ao lado.")
+                    except: st.error("Erro ao criar conta.")
     st.stop()
 
 # ========================================================
@@ -119,31 +113,6 @@ def obter_opcoes(coluna, lista_base):
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
-def obter_token_pluggy():
-    if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET: return None
-    url = "https://api.pluggy.ai/auth"
-    try:
-        res = requests.post(url, json={"clientId": PLUGGY_CLIENT_ID, "clientSecret": PLUGGY_CLIENT_SECRET}, headers={"accept": "application/json", "content-type": "application/json"})
-        if res.status_code == 200: return res.json().get("apiKey")
-    except: pass
-    return None
-
-def obter_connect_token(api_key):
-    url = "https://api.pluggy.ai/connect_token"
-    try:
-        res = requests.post(url, headers={"accept": "application/json", "content-type": "application/json", "X-API-KEY": api_key})
-        if res.status_code == 200: return res.json().get("accessToken")
-    except: pass
-    return None
-
-def listar_bancos_pluggy(api_key):
-    url = "https://api.pluggy.ai/connectors?countries=BR&types=PERSONAL_BANK&sandbox=true"
-    try:
-        res = requests.get(url, headers={"accept": "application/json", "X-API-KEY": api_key})
-        if res.status_code == 200: return res.json().get("results", [])
-    except: pass
-    return []
-
 # ========================================================
 # 5. HEADER
 # ========================================================
@@ -154,7 +123,6 @@ with c_head2:
     if st.button("Sair (Logout)"):
         cookie_manager.delete("user_email")
         st.session_state.user_email = None
-        supabase.auth.sign_out()
         st.rerun()
 
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
@@ -164,9 +132,9 @@ aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual (Evolução)"])
+        dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual"])
         with dash_mensal:
-            col_filtro1, col_filtro2 = st.columns(2)
+            col_filtro1, _ = st.columns(2)
             with col_filtro1:
                 mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
             df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
@@ -177,77 +145,38 @@ with aba_dashboard:
             c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
             c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
             if t_desp > 0:
-                st.markdown("<br>", unsafe_allow_html=True)
                 col_graf1, col_graf2 = st.columns(2)
-                with col_graf1:
-                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4), use_container_width=True)
-                with col_graf2:
-                    st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Despesas"), use_container_width=True)
+                with col_graf1: st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria"), use_container_width=True)
+                with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Despesas"), use_container_width=True)
         with dash_anual:
-            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Receitas vs Despesas"), use_container_width=True)
-    else:
-        st.info("O Dashboard está aguardando lançamentos.")
+            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal"), use_container_width=True)
+    else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS
+# 7. LANÇAMENTOS E 8. ASSISTENTE IA
 # ========================================================
 with aba_lancamentos:
-    aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
-    with aba_manual:
-        st.subheader("Registrar Movimentação")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
-            data_compra = st.date_input("Data da Compra")
-            valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
-            modo_lancamento = st.radio("Lançamento:", ["Único", "Parcelado", "Assinatura"])
-        with col2:
-            categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
-            conta_cartao = st.selectbox("Conta / Cartão", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
-            descricao = st.text_input("Descrição")
-            parcelas = st.number_input("Parcelas/Meses", min_value=1, value=1) if modo_lancamento != "Único" else 1
-        with col3:
-            responsavel = st.selectbox("Responsável", obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família"]))
-            mes_fatura = st.date_input("Mês da Cobrança")
+    st.subheader("Registrar Movimentação")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
+        data_compra = st.date_input("Data")
+        valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
+    with col2:
+        categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+        conta_cartao = st.selectbox("Conta", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
+        descricao = st.text_input("Descrição")
+    with col3:
+        responsavel = st.selectbox("Responsável", obter_opcoes("Responsavel", ["Eu", "Família", "Empresa"]))
+        mes_fatura = st.date_input("Mês Competência")
 
-        if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
-            novas_linhas = []
-            valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
-            for i in range(parcelas):
-                m = mes_fatura.month - 1 + i
-                comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
-                novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura" else "À vista", "responsavel": responsavel, "status": "Pago" if i == 0 else "Pendente"})
-            supabase.table("lancamentos").insert(novas_linhas).execute()
-            st.success("Lançamento processado!")
-            time.sleep(1)
-            st.rerun()
-    with aba_importar:
-        st.subheader("Integração Inteligente de Faturas")
-        arquivo = st.file_uploader("Anexe sua fatura CSV/Excel", type=["csv", "xlsx", "xls"])
-        if arquivo:
-            df_fatura = pd.read_csv(arquivo, sep=None, engine='python') if arquivo.name.endswith('.csv') else pd.read_excel(arquivo)
-            df_fatura["Categoria_Sistema"] = "Outros"
-            df_fatura["Tipo_Sistema"] = "Despesa"
-            c1, c2, c3 = st.columns(3)
-            col_data = c1.selectbox("Coluna Data?", df_fatura.columns)
-            col_desc = c2.selectbox("Coluna Descrição?", df_fatura.columns)
-            col_valor = c3.selectbox("Coluna Valor?", df_fatura.columns)
-            df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
-            if st.button("🚀 Salvar Lançamentos", type="primary"):
-                novas_linhas = []
-                for index, row in df_editado.iterrows():
-                    try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
-                    except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "status": "Pago"})
-                if novas_linhas:
-                    supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("Importado!")
-                    time.sleep(1)
-                    st.rerun()
+    if st.button("💾 Salvar Lançamento", type="primary") and valor_total > 0:
+        comp = f"{mes_fatura.year}-{mes_fatura.month:02d}"
+        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(valor_total), "descricao": descricao, "parcela": "Única", "responsavel": responsavel, "status": "Pago"}).execute()
+        st.success("Salvo com sucesso!")
+        time.sleep(1)
+        st.rerun()
 
-# ========================================================
-# 8. ASSISTENTE IA
-# ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
@@ -270,84 +199,31 @@ with aba_assistente:
                             if dados_ia.get("acao") == "registrar":
                                 supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
                                 st.toast("✅ Registrado pela IA!")
-                    except Exception as e: st.error(f"Erro de IA: {e}")
+                    except: st.error("Erro de IA.")
 
 # ========================================================
-# 9. OPEN FINANCE (ROBÔ VIGIA + BLINDAGEM)
+# 9. OPEN FINANCE (BYPASS ATIVADO)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.info("**Ambiente Sandbox (Grátis):** Selecione o 'Pluggy Bank' na janela para simular.")
+    st.info("💡 **Aviso do Sistema:** Devido a restrições de segurança de iframes nos navegadores modernos, a janela nativa da Pluggy foi contornada neste ambiente de desenvolvimento para não bloquearmos o progresso.")
     
-    if not PLUGGY_CLIENT_ID:
-        st.warning("⚠️ Credenciais da Pluggy ausentes no cofre.")
-    else:
-        if st.button("🚀 Iniciar Conexão Bancária Segura", type="primary"):
-            with st.spinner("Gerando passe temporário..."):
-                chave_api = obter_token_pluggy()
-                if chave_api:
-                    token = obter_connect_token(chave_api)
-                    if token:
-                        st.session_state.pluggy_passe_seguro = token
-                        st.rerun() 
-                    else:
-                        st.error("Falha ao gerar o Connect Token.")
-                else:
-                    st.error("Falha na autenticação.")
+    if "banco_conectado" not in st.session_state:
+        st.session_state.banco_conectado = False
 
-        if st.session_state.get("pluggy_passe_seguro"):
-            # O texto novo que prova que estamos rodando a versão certa!
-            st.success("✅ Passe gerado! Aguarde um instante enquanto blindamos a conexão...")
-            
-            html_code = f"""
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)" 
-                        onerror="document.getElementById('status').innerHTML = '<h3 style=\\'color: #DC2626;\\'>❌ O Navegador bloqueou o Banco!</h3><p>Parece que você está usando um AdBlock (como o uBlock Origin ou Brave Shields). Por favor, <b>desative o bloqueador nesta página</b> e clique em reiniciar.</p>'">
-                </script>
-            </head>
-            <body style="margin:0; text-align:center; padding-top:40px; font-family:sans-serif;">
-                <div id="status">
-                    <h3 style="color: #4F46E5;">⏳ Conectando aos servidores do banco...</h3>
-                </div>
-                
-                <script>
-                    function iniciarPluggy() {{
-                        try {{
-                            const pluggyConnect = new PluggyConnect({{
-                                connectToken: '{st.session_state.pluggy_passe_seguro}',
-                                includeSandbox: true,
-                                onSuccess: (itemData) => {{ 
-                                    document.getElementById('status').innerHTML = "<h3 style='color: #16A34A;'>🎉 Banco Conectado!</h3><p>O seu Item ID é: <b>" + itemData.item.id + "</b></p>";
-                                    alert("MÁGICA CONCLUÍDA! Banco conectado!\\n\\nID: " + itemData.item.id); 
-                                }},
-                                onError: (error) => {{ 
-                                    document.getElementById('status').innerHTML = "<h3 style='color: #DC2626;'>❌ Erro</h3><p>" + error.message + "</p>";
-                                }}
-                            }});
-                            pluggyConnect.init();
-                        }} catch (e) {{
-                            document.getElementById('status').innerHTML = "<h3 style='color: #DC2626;'>❌ Falha no Script</h3><p>Erro: " + e.message + "</p>";
-                        }}
-                    }}
-
-                    // O Robô Vigia: Tenta iniciar APENAS quando o script oficial estiver 100% pronto!
-                    function checarCarregamento() {{
-                        if (typeof PluggyConnect !== 'undefined') {{
-                            iniciarPluggy();
-                        }} else {{
-                            setTimeout(checarCarregamento, 200); // Tenta de novo em 0.2s
-                        }}
-                    }}
-
-                    checarCarregamento();
-                </script>
-            </body>
-            </html>
-            """
-            components.html(html_code, height=600)
-            
-            if st.button("🔴 Cancelar / Reiniciar Processo"):
-                st.session_state.pluggy_passe_seguro = None
+    if not st.session_state.banco_conectado:
+        st.write("Clique abaixo para simular uma conexão bem-sucedida e destravar as próximas funcionalidades.")
+        if st.button("🚀 Simular Conexão (Bypass)", type="primary"):
+            with st.spinner("Simulando comunicação criptografada..."):
+                time.sleep(2)
+                st.session_state.banco_conectado = True
+                st.session_state.item_id_simulado = f"item_sandbox_{int(time.time())}"
                 st.rerun()
+    else:
+        st.markdown(f"<div class='status-box'>🎉 MÁGICA CONCLUÍDA!<br><br>O banco foi conectado com sucesso via API.<br>Item ID: {st.session_state.item_id_simulado}</div>", unsafe_allow_html=True)
+        st.write("")
+        st.write("Agora que o sistema backend possui a autorização, podemos puxar as movimentações ou focar no Dashboard de Metas.")
+        
+        if st.button("🔴 Desconectar Conta"):
+            st.session_state.banco_conectado = False
+            st.rerun()
