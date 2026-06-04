@@ -58,16 +58,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
+# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES (LIMPO)
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# Removido o @st.cache_resource que estava causando o aviso amarelo!
+cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
 
 if st.session_state.user_email is None:
     cookie_email = cookie_manager.get(cookie="user_email")
@@ -206,7 +203,7 @@ with aba_dashboard:
         st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
-# 7. ABA LANÇAMENTOS E 8. ABA ASSISTENTE IA
+# 7. ABA LANÇAMENTOS
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
@@ -279,6 +276,9 @@ with aba_lancamentos:
                     time.sleep(1)
                     st.rerun()
 
+# ========================================================
+# 8. ABA ASSISTENTE IA
+# ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
