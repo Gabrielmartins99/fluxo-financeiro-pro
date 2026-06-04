@@ -4,20 +4,26 @@ import plotly.express as px
 from datetime import datetime
 import time
 import json
+import requests
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
 
 # ========================================================
-# 1. CREDENCIAIS DE BANCO DE DADOS E INTELIGÊNCIA ARTIFICIAL
+# 1. CREDENCIAIS DE BANCO DE DADOS, IA E OPEN FINANCE
 # ========================================================
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
+# Puxa as chaves do cofre de forma segura
 try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+    PLUGGY_CLIENT_ID = st.secrets.get("PLUGGY_CLIENT_ID", "")
+    PLUGGY_CLIENT_SECRET = st.secrets.get("PLUGGY_CLIENT_SECRET", "")
 except:
     GEMINI_API_KEY = ""
+    PLUGGY_CLIENT_ID = ""
+    PLUGGY_CLIENT_SECRET = ""
 
 @st.cache_resource
 def init_connection():
@@ -52,18 +58,16 @@ st.markdown("""
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
-        .bank-btn { text-align: center; padding: 20px; border: 1px solid #E2E8F0; border-radius: 15px; background: white; transition: 0.3s; cursor: pointer; }
-        .bank-btn:hover { border-color: #4F46E5; box-shadow: 0 4px 12px rgba(79,70,229,0.1); }
+        .pluggy-card { background: white; border: 1px solid #E2E8F0; border-radius: 10px; padding: 15px; text-align: center; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES (LIMPO)
+# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
-# Removido o @st.cache_resource que estava causando o aviso amarelo!
 cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
 
 if st.session_state.user_email is None:
@@ -103,7 +107,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE
+# 4. FUNÇÕES BASE E CONEXÃO PLUGGY (NOVO!)
 # ========================================================
 def carregar_dados():
     try:
@@ -117,7 +121,7 @@ def carregar_dados():
             })
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
             return df
-    except Exception as e:
+    except:
         pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"])
 
@@ -131,6 +135,32 @@ def obter_opcoes(coluna, lista_base):
 
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
+
+# Motor da Pluggy
+def obter_token_pluggy():
+    if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
+        return None
+    url = "https://api.pluggy.ai/auth"
+    payload = {"clientId": PLUGGY_CLIENT_ID, "clientSecret": PLUGGY_CLIENT_SECRET}
+    headers = {"accept": "application/json", "content-type": "application/json"}
+    try:
+        res = requests.post(url, json=payload, headers=headers)
+        if res.status_code == 200:
+            return res.json().get("apiKey")
+    except:
+        pass
+    return None
+
+def listar_bancos_pluggy(api_key):
+    url = "https://api.pluggy.ai/connectors?countries=BR&types=PERSONAL_BANK"
+    headers = {"accept": "application/json", "X-API-KEY": api_key}
+    try:
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            return res.json().get("results", [])
+    except:
+        pass
+    return []
 
 # ========================================================
 # 5. HEADER DO USUÁRIO LOGADO
@@ -298,41 +328,42 @@ with aba_assistente:
                     st.markdown(texto_limpo)
                     st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
                     if "```json" in texto_resposta:
-                        dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
+                        dados_ia = json.loads(texto_resposta.split("```json")[1].split("
+```")[0].strip())
                         if dados_ia.get("acao") == "registrar":
                             supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
                             st.toast("✅ Registrado pela IA!")
 
 # ========================================================
-# 9. ABA OPEN FINANCE (A VITRINE)
+# 9. ABA OPEN FINANCE (A CONEXÃO REAL)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
     st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos e faturas.")
-    
-    st.info("**Ambiente Seguro:** Suas credenciais bancárias são criptografadas e não são armazenadas pelo Fluxo Financeiro PRO. Utilizamos protocolos oficiais do Banco Central.")
+    st.info("**Ambiente Seguro:** Credenciais criptografadas de ponta a ponta. Autorizado pelo Banco Central.")
 
-    st.markdown("### Selecione a sua instituição financeira:")
-    
-    c_banco1, c_banco2, c_banco3, c_banco4 = st.columns(4)
-    banco_clicado = None
-
-    with c_banco1:
-        if st.button("🟣 Nubank", use_container_width=True): banco_clicado = "Nubank"
-    with c_banco2:
-        if st.button("🟠 Banco Inter", use_container_width=True): banco_clicado = "Banco Inter"
-    with c_banco3:
-        if st.button("🟠 Itaú", use_container_width=True): banco_clicado = "Itaú"
-    with c_banco4:
-        if st.button("🔴 Bradesco", use_container_width=True): banco_clicado = "Bradesco"
-
-    if banco_clicado:
-        st.markdown("---")
-        st.write(f"### Conectando com **{banco_clicado}**...")
-        with st.spinner("Iniciando protocolo de segurança Open Finance..."):
-            time.sleep(2)
-            st.success(f"Ambiente de homologação conectado ao {banco_clicado} com sucesso!")
-            st.write("O provedor liberou o acesso. Clique abaixo para sincronizar as transações recentes.")
-            
-            if st.button(f"📥 Sincronizar Últimos 30 dias do {banco_clicado}", type="primary", use_container_width=True):
-                st.toast("Transações sincronizadas com sucesso! (Simulação)")
+    if not PLUGGY_CLIENT_ID:
+        st.warning("⚠️ Insira suas credenciais da Pluggy no Cofre de Segredos (Secrets) do Streamlit para ativar a comunicação.")
+    else:
+        if st.button("📡 Autenticar com os Servidores da Pluggy (Ao Vivo)", type="primary"):
+            with st.spinner("Negociando chaves de segurança com a Pluggy..."):
+                chave_api = obter_token_pluggy()
+                
+                if chave_api:
+                    st.success("✅ Conexão estabelecida com sucesso! Obtendo lista oficial de instituições suportadas...")
+                    bancos_oficiais = listar_bancos_pluggy(chave_api)
+                    
+                    if bancos_oficiais:
+                        st.write("### Instituições Oficiais Encontradas no Sandbox:")
+                        cols = st.columns(4)
+                        for idx, banco in enumerate(bancos_oficiais[:8]): # Mostra os 8 primeiros para manter o design limpo
+                            with cols[idx % 4]:
+                                st.markdown(f'<div class="pluggy-card">{banco["name"]}</div>', unsafe_allow_html=True)
+                                st.write("")
+                                
+                        st.markdown("---")
+                        st.write("**Próxima Etapa Real:** Para o cliente clicar no banco e digitar a senha de forma segura, precisamos renderizar o **Pluggy Connect Widget** (Uma janela Javascript que abre por cima do sistema).")
+                    else:
+                        st.warning("Não foi possível listar os bancos no momento.")
+                else:
+                    st.error("Falha na autenticação. Verifique se o Client ID e Secret estão corretos no cofre do Streamlit.")
