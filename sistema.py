@@ -60,7 +60,8 @@ st.markdown("""
 # ========================================================
 # 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
 # ========================================================
-@st.cache_resource(experimental_allow_widgets=True)
+# Erro corrigido aqui: removido o experimental_allow_widgets que o Streamlit não aceita mais
+@st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager()
 
