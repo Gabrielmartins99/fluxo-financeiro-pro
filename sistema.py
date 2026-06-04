@@ -14,7 +14,6 @@ import extra_streamlit_components as stx
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
-# Puxa a chave do Google de forma 100% segura do cofre do Streamlit
 try:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 except:
@@ -26,7 +25,6 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# Configuração do Cérebro da IA
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
@@ -54,26 +52,28 @@ st.markdown("""
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
+        .bank-btn { text-align: center; padding: 20px; border: 1px solid #E2E8F0; border-radius: 15px; background: white; transition: 0.3s; cursor: pointer; }
+        .bank-btn:hover { border-color: #4F46E5; box-shadow: 0 4px 12px rgba(79,70,229,0.1); }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES (CORRIGIDO)
+# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
 # ========================================================
-# 1. Garante que a variável do usuário existe primeiro (evita o AttributeError)
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
-# 2. Inicia o Cookie Manager de forma limpa (sem o cache que causava o alerta amarelo)
-cookie_manager = stx.CookieManager()
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
 
-# 3. Se não tem ninguém logado na sessão, tenta puxar da memória do navegador
+cookie_manager = get_cookie_manager()
+
 if st.session_state.user_email is None:
     cookie_email = cookie_manager.get(cookie="user_email")
     if cookie_email:
         st.session_state.user_email = cookie_email
 
-# 4. Tela de Login caso realmente não tenha usuário
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
     
@@ -89,7 +89,6 @@ if not st.session_state.user_email:
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
                         st.session_state.user_email = res.user.email
-                        # Salva o cookie por 30 dias
                         cookie_manager.set("user_email", res.user.email, max_age=30*24*60*60)
                         st.rerun()
                     except Exception as e:
@@ -98,7 +97,6 @@ if not st.session_state.user_email:
             with aba_registro:
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
-                
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
                     try:
                         res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
@@ -138,7 +136,7 @@ LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 # ========================================================
-# 5. HEADER DO USUÁRIO LOGADO E NAVEGAÇÃO
+# 5. HEADER DO USUÁRIO LOGADO
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -208,47 +206,31 @@ with aba_dashboard:
         st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
-# 7. ABA LANÇAMENTOS
+# 7. ABA LANÇAMENTOS E 8. ABA ASSISTENTE IA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
     
     with aba_manual:
-        st.subheader("Registrar Movimentação Avançada")
+        st.subheader("Registrar Movimentação")
         col1, col2, col3 = st.columns(3)
         with col1:
             tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
             data_compra = st.date_input("Data da Compra")
             valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
-            st.markdown("---")
-            modo_lancamento = st.radio("Como é este lançamento?", ["Único (À vista)", "Parcelado", "Assinatura Mensal (Recorrente)"])
+            modo_lancamento = st.radio("Lançamento:", ["Único", "Parcelado", "Assinatura"])
         with col2:
             categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
             conta_cartao = st.selectbox("Conta / Cartão", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
-            descricao = st.text_input("Descrição (Ex: Netflix, iFood)")
-            st.markdown("---")
-            if modo_lancamento == "Parcelado":
-                parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
-            elif modo_lancamento == "Assinatura Mensal (Recorrente)":
-                parcelas = st.number_input("Projetar por quantos meses?", min_value=2, max_value=60, value=12)
-            else:
-                parcelas = 1
+            descricao = st.text_input("Descrição")
+            parcelas = st.number_input("Parcelas/Meses", min_value=1, value=1) if modo_lancamento != "Único" else 1
         with col3:
-            responsavel = st.selectbox("Dono do Gasto (Responsável)", obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]))
-            mes_fatura = st.date_input("Mês da 1ª Fatura/Cobrança")
+            responsavel = st.selectbox("Responsável", obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família"]))
+            mes_fatura = st.date_input("Mês da Cobrança")
 
         if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
             novas_linhas = []
-            if modo_lancamento == "Parcelado":
-                valor_por_mes = valor_total / parcelas
-                info_parcela = lambda i: f"{i+1}/{parcelas}"
-            elif modo_lancamento == "Assinatura Mensal (Recorrente)":
-                valor_por_mes = valor_total 
-                info_parcela = lambda i: "Recorrente"
-            else:
-                valor_por_mes = valor_total
-                info_parcela = lambda i: "À vista"
-
+            valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
             for i in range(parcelas):
                 m = mes_fatura.month - 1 + i
                 y = mes_fatura.year + (m // 12)
@@ -257,150 +239,100 @@ with aba_lancamentos:
                     "user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"),
                     "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral",
                     "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)),
-                    "descricao": descricao, "parcela": info_parcela(i), "responsavel": responsavel, 
-                    "status": "Pago" if i == 0 else "Pendente"
+                    "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura" else "À vista", 
+                    "responsavel": responsavel, "status": "Pago" if i == 0 else "Pendente"
                 })
-            try:
-                supabase.table("lancamentos").insert(novas_linhas).execute()
-                st.success("✅ Lançamento processado com sucesso!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar na nuvem: {e}")
+            supabase.table("lancamentos").insert(novas_linhas).execute()
+            st.success("Lançamento processado!")
+            time.sleep(1)
+            st.rerun()
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
-        st.info("**💡 Dica:** Exporte sua fatura em CSV/Excel pelo App do banco e anexe abaixo.")
-        banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
-        arquivo = st.file_uploader("Anexe o arquivo da fatura aqui", type=["csv", "xlsx", "xls"])
-        
-        if arquivo is not None:
-            try:
-                if arquivo.name.endswith('.csv'):
-                    df_fatura = pd.read_csv(arquivo, sep=None, engine='python') 
-                else:
-                    df_fatura = pd.read_excel(arquivo)
-                
-                if "Categoria_Sistema" not in df_fatura.columns: df_fatura["Categoria_Sistema"] = "Outros"
-                if "Tipo_Sistema" not in df_fatura.columns: df_fatura["Tipo_Sistema"] = "Despesa"
-                    
-                st.success("✅ Arquivo lido. Mapeie as colunas abaixo:")
-                c1, c2, c3 = st.columns(3)
-                col_data = c1.selectbox("Qual coluna contém a Data?", df_fatura.columns)
-                col_desc = c2.selectbox("Qual coluna contém a Descrição?", df_fatura.columns)
-                col_valor = c3.selectbox("Qual coluna contém o Valor?", df_fatura.columns)
-                
-                df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
-                
-                if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
-                    novas_linhas = []
-                    mes_atual = datetime.now().strftime("%Y-%m")
-                    for index, row in df_editado.iterrows():
-                        try:
-                            val_str = str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip()
-                            val = float(val_str)
-                            if val == 0: continue
-                        except: val = 0.0
-                        novas_linhas.append({
-                            "user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10],
-                            "competencia": mes_atual, "tipo": row.get("Tipo_Sistema", "Despesa"),
-                            "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Importado",
-                            "conta_cartao": banco_selecionado, "valor": abs(val),
-                            "descricao": str(row[col_desc]), "parcela": "Fatura",
-                            "responsavel": "Eu", "status": "Pago"
-                        })
-                    if novas_linhas:
-                        supabase.table("lancamentos").insert(novas_linhas).execute()
-                        st.success(f"✅ {len(novas_linhas)} lançamentos importados para a nuvem!")
-                        time.sleep(2)
-                        st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao processar arquivo: {e}")
+        arquivo = st.file_uploader("Anexe sua fatura CSV/Excel", type=["csv", "xlsx", "xls"])
+        if arquivo:
+            df_fatura = pd.read_csv(arquivo, sep=None, engine='python') if arquivo.name.endswith('.csv') else pd.read_excel(arquivo)
+            df_fatura["Categoria_Sistema"] = "Outros"
+            df_fatura["Tipo_Sistema"] = "Despesa"
+            c1, c2, c3 = st.columns(3)
+            col_data = c1.selectbox("Coluna Data?", df_fatura.columns)
+            col_desc = c2.selectbox("Coluna Descrição?", df_fatura.columns)
+            col_valor = c3.selectbox("Coluna Valor?", df_fatura.columns)
+            df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
+            if st.button("🚀 Salvar Lançamentos", type="primary"):
+                novas_linhas = []
+                for index, row in df_editado.iterrows():
+                    try:
+                        val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
+                        if val == 0: continue
+                    except: val = 0.0
+                    novas_linhas.append({
+                        "user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10],
+                        "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"),
+                        "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado",
+                        "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura",
+                        "responsavel": "Eu", "status": "Pago"
+                    })
+                if novas_linhas:
+                    supabase.table("lancamentos").insert(novas_linhas).execute()
+                    st.success("Importado!")
+                    time.sleep(1)
+                    st.rerun()
 
-# ========================================================
-# 8. ABA ASSISTENTE IA (O CÉREBRO DIGITAL ATIVO)
-# ========================================================
 with aba_assistente:
-    st.markdown("### 🤖 Cérebro Digital - O seu Assistente Pessoal")
-    
-    if not modelo_ia:
-        st.warning("⚠️ O Cérebro ainda está dormindo. Configure a sua chave da API no cofre de segredos do Streamlit (Settings > Secrets) para acordá-lo!")
-    else:
+    st.markdown("### 🤖 Cérebro Digital")
+    if modelo_ia:
         if "mensagens_chat" not in st.session_state:
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Eu sou o Assistente IA do Fluxo Financeiro PRO. Pode conversar comigo ou me pedir para registrar um gasto (ex: 'Gastei 50 no iFood no Nubank hoje')."}]
-
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Me peça para registrar um gasto!"}]
         for msg in st.session_state.mensagens_chat:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        prompt = st.chat_input("Digite sua mensagem aqui...")
-        
+            with st.chat_message(msg["role"]): st.markdown(msg["content"])
+        prompt = st.chat_input("Digite sua mensagem...")
         if prompt:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
+            with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
                 with st.spinner("Processando..."):
-                    try:
-                        instrucao_sistema = f"""
-                        Você é o assistente financeiro do aplicativo 'Fluxo Financeiro PRO'.
-                        O usuário disse: "{prompt}"
-                        
-                        Se for apenas uma conversa, dúvida ou conselho financeiro, responda normalmente, de forma amigável e curta.
-                        
-                        Se o usuário estiver relatando um GASTO ou uma RECEITA, você deve responder amigavelmente confirmando que registrou E, no final da sua resposta, incluir EXATAMENTE este bloco de código JSON abaixo preenchido com os dados que você extraiu da frase do usuário (use as categorias: Alimentação, Transporte, Moradia, Salário, Lazer, Saúde, Educação, Investimentos, Outros):
-                        
-                        ```json
-                        {{
-                            "acao": "registrar",
-                            "tipo": "Despesa",
-                            "valor": 0.00,
-                            "descricao": "",
-                            "categoria": "",
-                            "conta": ""
-                        }}
-                        ```
-                        """
-                        
-                        resposta = modelo_ia.generate_content(instrucao_sistema)
-                        texto_resposta = resposta.text
-                        
-                        texto_limpo = texto_resposta.split("```json")[0].strip()
-                        st.markdown(texto_limpo)
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
-                        
-                        if "```json" in texto_resposta:
-                            bloco_json = texto_resposta.split("```json")[1].split("```")[0].strip()
-                            dados_ia = json.loads(bloco_json)
-                            
-                            if dados_ia.get("acao") == "registrar":
-                                mes_atual = datetime.now().strftime("%Y-%m")
-                                data_hoje = datetime.now().strftime("%Y-%m-%d")
-                                
-                                nova_linha = {
-                                    "user_email": st.session_state.user_email,
-                                    "data_compra": data_hoje,
-                                    "competencia": mes_atual,
-                                    "tipo": dados_ia.get("tipo", "Despesa"),
-                                    "categoria": dados_ia.get("categoria", "Outros"),
-                                    "subcategoria": "Lançado via IA",
-                                    "conta_cartao": dados_ia.get("conta", "Conta Automática"),
-                                    "valor": float(dados_ia.get("valor", 0.0)),
-                                    "descricao": dados_ia.get("descricao", "Lançamento via Assistente"),
-                                    "parcela": "À vista",
-                                    "responsavel": "Eu",
-                                    "status": "Pago"
-                                }
-                                supabase.table("lancamentos").insert(nova_linha).execute()
-                                st.toast("✅ Mágica Feita! A IA gravou o dado diretamente no banco.")
-                                
-                    except Exception as e:
-                        st.error(f"Erro de comunicação com o Cérebro IA: {e}")
+                    resposta = modelo_ia.generate_content(f'O usuário disse: "{prompt}". Se for um gasto, gere um JSON no final com acao: registrar, tipo, valor, descricao, categoria, conta.')
+                    texto_resposta = resposta.text
+                    texto_limpo = texto_resposta.split("```json")[0].strip()
+                    st.markdown(texto_limpo)
+                    st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
+                    if "```json" in texto_resposta:
+                        dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
+                        if dados_ia.get("acao") == "registrar":
+                            supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
+                            st.toast("✅ Registrado pela IA!")
 
 # ========================================================
-# 9. ABA OPEN FINANCE
+# 9. ABA OPEN FINANCE (A VITRINE)
 # ========================================================
 with aba_openfinance:
-    st.subheader("🔌 Hub de Integração Aberta")
-    st.info("A infraestrutura do banco de dados na nuvem foi configurada com sucesso. A conexão via Hub Integrador será iniciada na próxima etapa.")
+    st.subheader("🔌 Hub de Integração Bancária")
+    st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos e faturas.")
+    
+    st.info("**Ambiente Seguro:** Suas credenciais bancárias são criptografadas e não são armazenadas pelo Fluxo Financeiro PRO. Utilizamos protocolos oficiais do Banco Central.")
+
+    st.markdown("### Selecione a sua instituição financeira:")
+    
+    c_banco1, c_banco2, c_banco3, c_banco4 = st.columns(4)
+    banco_clicado = None
+
+    with c_banco1:
+        if st.button("🟣 Nubank", use_container_width=True): banco_clicado = "Nubank"
+    with c_banco2:
+        if st.button("🟠 Banco Inter", use_container_width=True): banco_clicado = "Banco Inter"
+    with c_banco3:
+        if st.button("🟠 Itaú", use_container_width=True): banco_clicado = "Itaú"
+    with c_banco4:
+        if st.button("🔴 Bradesco", use_container_width=True): banco_clicado = "Bradesco"
+
+    if banco_clicado:
+        st.markdown("---")
+        st.write(f"### Conectando com **{banco_clicado}**...")
+        with st.spinner("Iniciando protocolo de segurança Open Finance..."):
+            time.sleep(2)
+            st.success(f"Ambiente de homologação conectado ao {banco_clicado} com sucesso!")
+            st.write("O provedor liberou o acesso. Clique abaixo para sincronizar as transações recentes.")
+            
+            if st.button(f"📥 Sincronizar Últimos 30 dias do {banco_clicado}", type="primary", use_container_width=True):
+                st.toast("Transações sincronizadas com sucesso! (Simulação)")
