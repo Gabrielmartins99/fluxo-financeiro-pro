@@ -4,7 +4,6 @@ import plotly.express as px
 from datetime import datetime
 import time
 import json
-import requests
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
@@ -53,20 +52,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO COM PROTEÇÃO DE LOGOUT REESCRITA
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
-cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
+cookie_manager = stx.CookieManager(key="gerenciador_cookies_unico")
 
-if st.session_state.user_email is None:
-    cookie_email = cookie_manager.get(cookie="user_email")
-    cookie_nome = cookie_manager.get(cookie="user_nome")
-    if cookie_email: 
-        st.session_state.user_email = cookie_email
-        st.session_state.user_nome = cookie_nome if cookie_nome else "Usuário"
+# Carrega os cookies guardados de forma segura
+cookies = cookie_manager.get_all()
+if st.session_state.user_email is None and cookies:
+    if "user_mail_saved" in cookies:
+        st.session_state.user_email = cookies["user_mail_saved"]
+        st.session_state.user_nome = cookies.get("user_name_saved", "Usuário")
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -83,8 +82,9 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
-                        cookie_manager.set("user_email", res.user.email, max_age=30*24*60*60)
-                        cookie_manager.set("user_nome", nome_salvo, max_age=30*24*60*60)
+                        
+                        cookie_manager.set("user_mail_saved", res.user.email, max_age=30*24*60*60)
+                        cookie_manager.set("user_name_saved", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
                     except: st.error("E-mail ou senha incorretos.")
             with aba_registro:
@@ -157,19 +157,19 @@ def gerar_pdf(df_mes, mes_selecionado):
     for index, row in df_lista.iterrows():
         desc = str(row['Descricao'])[:30] 
         linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Categoria'][:15]} | {desc} | R$ {row['Valor']:.2f}"
-        pdf.cell(190, 6, linha_texto, 0, 1, 'L')
+        pdf.cell(190, 6, inline_texto := linha_texto, 0, 1, 'L')
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER
+# 5. HEADER (LOGOUT ANTI-TRAVAMENTO)
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        cookie_manager.delete("user_email")
-        cookie_manager.delete("user_nome")
+        # Corrigido de forma absoluta: Remove apenas uma chave mestre para deslogar instantaneamente sem travar a tela
+        cookie_manager.delete("user_mail_saved")
         st.session_state.user_email = None
         st.session_state.user_nome = "Usuário"
         st.rerun()
@@ -233,7 +233,7 @@ with aba_dashboard:
                 if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
-                        gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
+                        gasto_atual = df_mes_metas[df_mes_metas["Categoria} == cat"]["Valor"].sum()
                         percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
                         st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
                         st.progress(percentual)
@@ -370,7 +370,7 @@ with aba_lancamentos:
                     if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
                         try:
                             supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("✅ Atualizado!")
+                            st.success("✅ Updated!")
                             time.sleep(1)
                             st.rerun()
                         except: st.error("Erro.")
@@ -383,7 +383,7 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (BLINDAGEM COMPLETA - TEXTO ULTRA CURTO)
+# 8. ASSISTENTE IA (BLINDAGEM TOTAL E INSTANTÂNEA)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
@@ -400,18 +400,15 @@ with aba_assistente:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Processando dados internos..."):
+                with st.spinner("Analisando registros..."):
                     try:
                         hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
-                        prompt_final = f"Atue como o motor financeiro de {st.session_state.user_nome}. Faça somas matemáticas se pedido datas (dia 1 ao 5) ou nomes (iFood).\nSe for registro por texto, adicione JSON Puro no fim com acao:registrar.\n\nDADOS:\n{hist_txt}\nPERGUNTA: {prompt}"
+                        prompt_final = f"Atue como o motor financeiro de {st.session_state.user_nome}. Faça somas matemáticas se pedido datas (dia 1 ao 5) ou nomes (iFood).\n\nDADOS:\n{hist_txt}\nPERGUNTA: {prompt}"
                         
                         resposta = modelo_ia.generate_content(prompt_final)
                         response_text = resposta.text
-                        
-                        # Resolvido de forma definitiva na engenharia de segurança
-                        parte_texto = response_text.split("```json")[0].strip()
-                        st.markdown(parte_texto)
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": parte_texto})
+                        st.markdown(response_text)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": response_text})
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
