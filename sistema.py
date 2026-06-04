@@ -265,16 +265,15 @@ with aba_assistente:
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 9. OPEN FINANCE (PILOTO AUTOMÁTICO)
+# 9. OPEN FINANCE (O ROBÔ VIGIA)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.info("**Ambiente Sandbox (Grátis):** Selecione o 'Pluggy Bank' na janela para simular.")
+    st.info("**Ambiente Sandbox (Grátis):** A janela do 'Pluggy Bank' abrirá automaticamente.")
     
     if not PLUGGY_CLIENT_ID:
         st.warning("⚠️ Credenciais da Pluggy ausentes no cofre.")
     else:
-        # Botão principal
         if st.button("🚀 Iniciar Conexão Bancária Segura", type="primary"):
             with st.spinner("Gerando passe temporário..."):
                 chave_api = obter_token_pluggy()
@@ -288,9 +287,8 @@ with aba_openfinance:
                 else:
                     st.error("Falha na autenticação.")
 
-        # Quando o passe é gerado, o Javascript roda sozinho!
         if st.session_state.get("pluggy_passe_seguro"):
-            st.success("✅ Passe gerado! O Widget de conexão vai abrir automaticamente.")
+            st.success("✅ Passe gerado! Aguarde um instante...")
             
             html_code = f"""
             <!DOCTYPE html>
@@ -300,8 +298,7 @@ with aba_openfinance:
             </head>
             <body style="margin:0; text-align:center; padding-top:40px; font-family:sans-serif;">
                 <div id="status">
-                    <h3 style="color: #4F46E5;">⏳ Carregando a janela do banco...</h3>
-                    <p>Se ela não abrir automaticamente em 3 segundos, verifique o bloqueador de pop-ups do seu navegador.</p>
+                    <h3 style="color: #4F46E5;">⏳ Conectando aos servidores do banco...</h3>
                 </div>
                 
                 <script>
@@ -311,7 +308,7 @@ with aba_openfinance:
                                 connectToken: '{st.session_state.pluggy_passe_seguro}',
                                 includeSandbox: true,
                                 onSuccess: (itemData) => {{ 
-                                    document.getElementById('status').innerHTML = "<h3 style='color: #16A34A;'>🎉 Banco Conectado com Sucesso!</h3><p>O seu Item ID é: <b>" + itemData.item.id + "</b></p>";
+                                    document.getElementById('status').innerHTML = "<h3 style='color: #16A34A;'>🎉 Banco Conectado!</h3><p>O seu Item ID é: <b>" + itemData.item.id + "</b></p>";
                                     alert("MÁGICA CONCLUÍDA! Banco conectado!\\n\\nID: " + itemData.item.id); 
                                 }},
                                 onError: (error) => {{ 
@@ -324,8 +321,16 @@ with aba_openfinance:
                         }}
                     }}
 
-                    // Dispara a janela do banco automaticamente 1 segundo após a tela carregar
-                    setTimeout(iniciarPluggy, 1000);
+                    // O Robô Vigia: Tenta iniciar até o código da Pluggy terminar de baixar
+                    function checarCarregamento() {{
+                        if (typeof PluggyConnect !== 'undefined') {{
+                            iniciarPluggy();
+                        }} else {{
+                            setTimeout(checarCarregamento, 200); // Tenta de novo em 0.2s
+                        }}
+                    }}
+
+                    checarCarregamento();
                 </script>
             </body>
             </html>
