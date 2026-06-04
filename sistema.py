@@ -56,30 +56,30 @@ if not st.session_state.user_email:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<div class='auth-box'>", unsafe_allow_html=True)
-        aba_login, aba_registro = st.tabs(["🔒 Entrar", "✨ Criar Conta"])
-        
-        with aba_login:
-            email_login = st.text_input("E-mail corporativo ou pessoal", key="log_email")
-            senha_login = st.text_input("Senha de acesso", type="password", key="log_senha")
-            if st.button("Acessar Painel", type="primary", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
-                    st.session_state.user_email = res.user.email
-                    st.rerun()
-                except Exception as e:
-                    st.error("E-mail ou senha incorretos. Tente novamente.")
-                    
-        with aba_registro:
-            email_reg = st.text_input("Melhor E-mail", key="reg_email")
-            senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
-            if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                    st.success("Conta criada com sucesso! Você já pode fazer login na aba ao lado.")
-                except Exception as e:
-                    st.error(f"Erro ao criar conta. Verifique os dados.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        # Usando o container nativo do Streamlit (sem bugs do quadro branco)
+        with st.container(border=True):
+            aba_login, aba_registro = st.tabs(["🔒 Entrar", "✨ Criar Conta"])
+            
+            with aba_login:
+                email_login = st.text_input("E-mail corporativo ou pessoal", key="log_email")
+                senha_login = st.text_input("Senha de acesso", type="password", key="log_senha")
+                if st.button("Acessar Painel", type="primary", use_container_width=True):
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
+                        st.session_state.user_email = res.user.email
+                        st.rerun()
+                    except Exception as e:
+                        st.error("E-mail ou senha incorretos. Tente novamente.")
+                        
+            with aba_registro:
+                email_reg = st.text_input("Melhor E-mail", key="reg_email")
+                senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
+                if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
+                    try:
+                        res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
+                        st.success("Conta criada com sucesso! Você já pode fazer login na aba ao lado.")
+                    except Exception as e:
+                        st.error(f"Erro ao criar conta. Verifique os dados.")
     
     st.stop() # Bloqueia o resto do código até o usuário logar!
 
