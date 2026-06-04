@@ -58,7 +58,7 @@ st.markdown("""
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
-        .pluggy-card { background: white; border: 1px solid #E2E8F0; border-radius: 10px; padding: 15px; text-align: center; font-weight: 600; }
+        .pluggy-card { background: white; border: 1px solid #E2E8F0; border-radius: 10px; padding: 15px; text-align: center; font-weight: 600; color: #4F46E5;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -107,7 +107,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E CONEXÃO PLUGGY (NOVO!)
+# 4. FUNÇÕES BASE E CONEXÃO PLUGGY
 # ========================================================
 def carregar_dados():
     try:
@@ -136,7 +136,7 @@ def obter_opcoes(coluna, lista_base):
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
-# Motor da Pluggy
+# Motor da Pluggy (Gera a API Key temporária e lista os bancos)
 def obter_token_pluggy():
     if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
         return None
@@ -307,7 +307,7 @@ with aba_lancamentos:
                     st.rerun()
 
 # ========================================================
-# 8. ABA ASSISTENTE IA
+# 8. ABA ASSISTENTE IA (CÓDIGO PROTEGIDO CONTRA CORTES)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
@@ -315,55 +315,78 @@ with aba_assistente:
         if "mensagens_chat" not in st.session_state:
             st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Me peça para registrar um gasto!"}]
         for msg in st.session_state.mensagens_chat:
-            with st.chat_message(msg["role"]): st.markdown(msg["content"])
+            with st.chat_message(msg["role"]): 
+                st.markdown(msg["content"])
+        
         prompt = st.chat_input("Digite sua mensagem...")
         if prompt:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.markdown(prompt)
+            with st.chat_message("user"): 
+                st.markdown(prompt)
+            
             with st.chat_message("assistant"):
                 with st.spinner("Processando..."):
-                    resposta = modelo_ia.generate_content(f'O usuário disse: "{prompt}". Se for um gasto, gere um JSON no final com acao: registrar, tipo, valor, descricao, categoria, conta.')
-                    texto_resposta = resposta.text
-                    texto_limpo = texto_resposta.split("```json")[0].strip()
-                    st.markdown(texto_limpo)
-                    st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
-                    if "```json" in texto_resposta:
-                        dados_ia = json.loads(texto_resposta.split("```json")[1].split("
-```")[0].strip())
-                        if dados_ia.get("acao") == "registrar":
-                            supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
-                            st.toast("✅ Registrado pela IA!")
+                    try:
+                        resposta = modelo_ia.generate_content(f'O usuário disse: "{prompt}". Se for um gasto, gere um JSON no final com acao: registrar, tipo, valor, descricao, categoria, conta.')
+                        texto_resposta = resposta.text
+                        
+                        texto_limpo = texto_resposta.split("```json")[0].strip()
+                        st.markdown(texto_limpo)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
+                        
+                        if "```json" in texto_resposta:
+                            bloco_bruto = texto_resposta.split("```json")[1]
+                            bloco_json = bloco_bruto.split("```")[0].strip()
+                            dados_ia = json.loads(bloco_json)
+                            
+                            if dados_ia.get("acao") == "registrar":
+                                nova_linha = {
+                                    "user_email": st.session_state.user_email, 
+                                    "data_compra": datetime.now().strftime("%Y-%m-%d"), 
+                                    "competencia": datetime.now().strftime("%Y-%m"), 
+                                    "tipo": dados_ia.get("tipo", "Despesa"), 
+                                    "categoria": dados_ia.get("categoria", "Outros"), 
+                                    "conta_cartao": dados_ia.get("conta", "IA"), 
+                                    "valor": float(dados_ia.get("valor", 0.0)), 
+                                    "descricao": dados_ia.get("descricao", "Assistente"), 
+                                    "parcela": "À vista", 
+                                    "responsavel": "Eu", 
+                                    "status": "Pago"
+                                }
+                                supabase.table("lancamentos").insert(nova_linha).execute()
+                                st.toast("✅ Registrado pela IA!")
+                    except Exception as e:
+                        st.error(f"Erro de IA: {e}")
 
 # ========================================================
 # 9. ABA OPEN FINANCE (A CONEXÃO REAL)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos e faturas.")
+    st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos.")
     st.info("**Ambiente Seguro:** Credenciais criptografadas de ponta a ponta. Autorizado pelo Banco Central.")
 
     if not PLUGGY_CLIENT_ID:
-        st.warning("⚠️ Insira suas credenciais da Pluggy no Cofre de Segredos (Secrets) do Streamlit para ativar a comunicação.")
+        st.warning("⚠️ Suas credenciais da Pluggy ainda não foram lidas pelo sistema. Verifique o cofre (Secrets).")
     else:
-        if st.button("📡 Autenticar com os Servidores da Pluggy (Ao Vivo)", type="primary"):
+        if st.button("📡 Autenticar com os Servidores da Pluggy", type="primary"):
             with st.spinner("Negociando chaves de segurança com a Pluggy..."):
                 chave_api = obter_token_pluggy()
                 
                 if chave_api:
-                    st.success("✅ Conexão estabelecida com sucesso! Obtendo lista oficial de instituições suportadas...")
+                    st.success("✅ Conexão estabelecida! Listando instituições suportadas...")
                     bancos_oficiais = listar_bancos_pluggy(chave_api)
                     
                     if bancos_oficiais:
-                        st.write("### Instituições Oficiais Encontradas no Sandbox:")
                         cols = st.columns(4)
-                        for idx, banco in enumerate(bancos_oficiais[:8]): # Mostra os 8 primeiros para manter o design limpo
+                        for idx, banco in enumerate(bancos_oficiais[:8]): 
                             with cols[idx % 4]:
                                 st.markdown(f'<div class="pluggy-card">{banco["name"]}</div>', unsafe_allow_html=True)
                                 st.write("")
-                                
+                        
                         st.markdown("---")
-                        st.write("**Próxima Etapa Real:** Para o cliente clicar no banco e digitar a senha de forma segura, precisamos renderizar o **Pluggy Connect Widget** (Uma janela Javascript que abre por cima do sistema).")
+                        st.write("**Aviso:** A renderização completa do Widget seguro de digitação de senha requer a inclusão do SDK Javascript da Pluggy no Streamlit.")
                     else:
                         st.warning("Não foi possível listar os bancos no momento.")
                 else:
-                    st.error("Falha na autenticação. Verifique se o Client ID e Secret estão corretos no cofre do Streamlit.")
+                    st.error("Falha na autenticação. Verifique suas credenciais no cofre.")
