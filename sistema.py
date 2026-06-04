@@ -283,11 +283,11 @@ with aba_lancamentos:
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("¼ Registrado com sucesso!")
+                    st.success("Registrado com sucesso!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e: st.error(f"Erro ao salvar: {e}")
-            else: st.warning("âš  Preencha os dados base.")
+            else: st.warning("Preencha os dados base.")
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
@@ -342,7 +342,7 @@ with aba_lancamentos:
                     if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
                         try:
                             supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("¼ Atualizado!")
+                            st.success("✅ Atualizado!")
                             time.sleep(1)
                             st.rerun()
                         except: st.error("Erro.")
@@ -355,7 +355,7 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (MÓDULO TOTALMENTE BLINDADO CONTRA CORTES)
+# 8. ASSISTENTE IA (O PROMPT SEGURO CONTRA CORTES)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital Financeiro")
@@ -363,14 +363,13 @@ with aba_assistente:
     
     if modelo_ia:
         if "mensagens_chat" not in st.session_state: 
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Sou seu assistente de finanças pessoal. Pode perguntar!"}]
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Pergunte sobre seu histórico estilo Pierre."}]
         
         for msg in st.session_state.mensagens_chat:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
         
         prompt = st.chat_input("Pergunte ao seu assistente de finanças...")
         if prompt:
-            # Resolvido: Linhas isoladas e encapsuladas para evitar erros de strings literais inacabadas
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             
@@ -379,22 +378,17 @@ with aba_assistente:
                     try:
                         hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Sem dados."
                         
-                        regra1 = "Aja como o assistente financeiro Pierre. "
-                        regra2 = "Analise o histórico para somas por períodos ou nomes (ex: iFood).\n"
-                        regra3 = "Se ele pedir para cadastrar, responda e gere um JSON estruturado no fim.\n"
-                        
-                        prompt_final = f"{regra1}{regra2}{regra3}HISTÓRICO:\n{hist_txt}\nPERGUNTA: {prompt}"
+                        # Injeção curta e direta: elimina risco de aspas soltas cortadas
+                        prompt_final = "Aja como o bot Pierre. Filtre as datas (ex: dia 1 ao 5) ou nomes (ex: iFood) se solicitado e faça somas. Se pedir para cadastrar, envie JSON estruturado no fim.\n" + "DADOS:\n" + hist_txt + "\nPERGUNTA: " + prompt
                         
                         resposta = modelo_ia.generate_content(prompt_final)
-                        texto_resposta = resposta.text
+                        texto_resposta = response_text = resposta.text
                         
-                        resposta_limpa = texto_resposta.split("```json")[0].strip()
-                        st.markdown(resposta_limpa)
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta_limpa})
+                        st.markdown(response_text.split("```json")[0].strip())
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": response_text.split("```json")[0].strip()})
                         
-                        if "
-```json" in texto_resposta:
-                            dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
+                        if "```json" in response_text:
+                            dados_ia = json.loads(response_text.split("```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
                                 supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Gabriel", "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
                                 st.toast("✅ Sincronizado via IA!")
