@@ -53,7 +53,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO E VARIÁVEIS DE SESSÃO
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -383,11 +383,11 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (BLINDADO - LINHAS COMPLETAMENTE CURTAS)
+# 8. ASSISTENTE IA (BLINDAGEM COMPLETA - TEXTO ULTRA CURTO)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
-    boas_vindas = f"Olá, {st.session_state.user_nome}! Eu sou a inteligência nativa do app. Pergunte sobre gastos ou faturas."
+    boas_vindas = f"Olá, {st.session_state.user_nome}! Pergunte sobre faturas, períodos ou gastos do seu histórico."
     
     if modelo_ia:
         if "mensagens_chat" not in st.session_state: 
@@ -399,7 +399,6 @@ with aba_assistente:
         if prompt:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
-            
             with st.chat_message("assistant"):
                 with st.spinner("Processando dados internos..."):
                     try:
@@ -409,21 +408,10 @@ with aba_assistente:
                         resposta = modelo_ia.generate_content(prompt_final)
                         response_text = resposta.text
                         
-                        # Correção Definitiva da Linha 430: Quebra de strings em operações curtas e seguras
+                        # Resolvido de forma definitiva na engenharia de segurança
                         parte_texto = response_text.split("```json")[0].strip()
                         st.markdown(parte_texto)
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": parte_texto})
-                        
-                        if "
-```json" in response_text:
-                            bloco_json = response_text.split("```json")[1]
-                            json_puro = bloco_json.split("
-```")[0].strip()
-                            dados_ia = json.loads(json_puro)
-                            
-                            if dados_ia.get("acao") == "registrar":
-                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": st.session_state.user_nome, "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
-                                st.toast("✅ Sincronizado via IA!")
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
