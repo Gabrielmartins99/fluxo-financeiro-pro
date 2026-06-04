@@ -283,11 +283,11 @@ with aba_lancamentos:
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("✅ Registrado com sucesso!")
+                    st.success("¼ Registrado com sucesso!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e: st.error(f"Erro ao salvar: {e}")
-            else: st.warning("⚠️ Preencha os dados base.")
+            else: st.warning("âš  Preencha os dados base.")
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
@@ -342,7 +342,7 @@ with aba_lancamentos:
                     if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
                         try:
                             supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("✅ Atualizado!")
+                            st.success("¼ Atualizado!")
                             time.sleep(1)
                             st.rerun()
                         except: st.error("Erro.")
@@ -355,7 +355,7 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (BLINDAGEM COMPLETA CONTRA QUEBRAS)
+# 8. ASSISTENTE IA (MÓDULO TOTALMENTE BLINDADO CONTRA CORTES)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital Financeiro")
@@ -370,38 +370,34 @@ with aba_assistente:
         
         prompt = st.chat_input("Pergunte ao seu assistente de finanças...")
         if prompt:
+            # Resolvido: Linhas isoladas e encapsuladas para evitar erros de strings literais inacabadas
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             
             with st.chat_message("assistant"):
                 with st.spinner("Analisando registros..."):
                     try:
-                        # Convertendo a tabela para string curta e compacta
-                        if not df.empty:
-                            hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False)
-                        else:
-                            hist_txt = "Sem dados."
+                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Sem dados."
                         
-                        # Engenharia de strings curtas e seguras concatenadas por blocos (Impede o corte de aspas triplas)
-                        regra1 = "Aja como o assistente de finanças Pierre do WhatsApp. "
-                        regra2 = "Analise o histórico e faça somas matemáticas se o usuário pedir períodos (ex: dia 1 ao 5) ou nomes específicos (ex: iFood).\n"
-                        regra3 = "Se ele pedir para cadastrar um gasto por texto, responda e gere um JSON no final com os dados.\n"
+                        regra1 = "Aja como o assistente financeiro Pierre. "
+                        regra2 = "Analise o histórico para somas por períodos ou nomes (ex: iFood).\n"
+                        regra3 = "Se ele pedir para cadastrar, responda e gere um JSON estruturado no fim.\n"
                         
-                        prompt_final = regra1 + regra2 + regra3 + "HISTÓRICO:\n" + hist_txt + "\nPERGUNTA: " + prompt
+                        prompt_final = f"{regra1}{regra2}{regra3}HISTÓRICO:\n{hist_txt}\nPERGUNTA: {prompt}"
                         
                         resposta = modelo_ia.generate_content(prompt_final)
                         texto_resposta = resposta.text
                         
-                        st.markdown(texto_resposta.split("```json")[0].strip())
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta.split("
-```json")[0].strip()})
+                        resposta_limpa = texto_resposta.split("```json")[0].strip()
+                        st.markdown(resposta_limpa)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta_limpa})
                         
-                        if "```json" in texto_resposta:
-                            dados_ia = json.loads(texto_resposta.split("
-```json")[1].split("```")[0].strip())
+                        if "
+```json" in texto_resposta:
+                            dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
                                 supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Gabriel", "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
-                                st.toast("✅ Sincronizado via Inteligência Artificial!")
+                                st.toast("✅ Sincronizado via IA!")
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
