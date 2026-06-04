@@ -8,6 +8,7 @@ import requests
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
+import streamlit.components.v1 as components
 
 # ========================================================
 # 1. CREDENCIAIS DE BANCO DE DADOS, IA E OPEN FINANCE
@@ -15,7 +16,6 @@ import extra_streamlit_components as stx
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
-# Puxa as chaves do cofre de forma segura
 try:
     GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
     PLUGGY_CLIENT_ID = st.secrets.get("PLUGGY_CLIENT_ID", "")
@@ -58,7 +58,6 @@ st.markdown("""
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
-        .pluggy-card { background: white; border: 1px solid #E2E8F0; border-radius: 10px; padding: 15px; text-align: center; font-weight: 600; color: #4F46E5;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -136,31 +135,23 @@ def obter_opcoes(coluna, lista_base):
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
-# Motor da Pluggy (Gera a API Key temporária e lista os bancos)
+# Geração de Tokens da Pluggy
 def obter_token_pluggy():
-    if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
-        return None
+    if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET: return None
     url = "https://api.pluggy.ai/auth"
-    payload = {"clientId": PLUGGY_CLIENT_ID, "clientSecret": PLUGGY_CLIENT_SECRET}
-    headers = {"accept": "application/json", "content-type": "application/json"}
     try:
-        res = requests.post(url, json=payload, headers=headers)
-        if res.status_code == 200:
-            return res.json().get("apiKey")
-    except:
-        pass
+        res = requests.post(url, json={"clientId": PLUGGY_CLIENT_ID, "clientSecret": PLUGGY_CLIENT_SECRET}, headers={"accept": "application/json", "content-type": "application/json"})
+        if res.status_code == 200: return res.json().get("apiKey")
+    except: pass
     return None
 
-def listar_bancos_pluggy(api_key):
-    url = "https://api.pluggy.ai/connectors?countries=BR&types=PERSONAL_BANK"
-    headers = {"accept": "application/json", "X-API-KEY": api_key}
+def obter_connect_token(api_key):
+    url = "https://api.pluggy.ai/connect_tokens"
     try:
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            return res.json().get("results", [])
-    except:
-        pass
-    return []
+        res = requests.post(url, headers={"accept": "application/json", "content-type": "application/json", "X-API-KEY": api_key})
+        if res.status_code == 200: return res.json().get("accessToken")
+    except: pass
+    return None
 
 # ========================================================
 # 5. HEADER DO USUÁRIO LOGADO
@@ -233,7 +224,7 @@ with aba_dashboard:
         st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
-# 7. ABA LANÇAMENTOS
+# 7. ABA LANÇAMENTOS E 8. ABA ASSISTENTE IA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
@@ -306,9 +297,6 @@ with aba_lancamentos:
                     time.sleep(1)
                     st.rerun()
 
-# ========================================================
-# 8. ABA ASSISTENTE IA (CÓDIGO PROTEGIDO CONTRA CORTES)
-# ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
@@ -359,34 +347,56 @@ with aba_assistente:
                         st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 9. ABA OPEN FINANCE (A CONEXÃO REAL)
+# 9. ABA OPEN FINANCE (O PLUGGY CONNECT REAL)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
     st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos.")
-    st.info("**Ambiente Seguro:** Credenciais criptografadas de ponta a ponta. Autorizado pelo Banco Central.")
+    st.info("**Ambiente Sandbox (Grátis):** Nenhum dado real é cobrado. Use dados falsos de teste se o banco pedir na janela.")
 
     if not PLUGGY_CLIENT_ID:
-        st.warning("⚠️ Suas credenciais da Pluggy ainda não foram lidas pelo sistema. Verifique o cofre (Secrets).")
+        st.warning("⚠️ Credenciais da Pluggy ausentes no cofre (Secrets).")
     else:
-        if st.button("📡 Autenticar com os Servidores da Pluggy", type="primary"):
-            with st.spinner("Negociando chaves de segurança com a Pluggy..."):
+        if st.button("🚀 Iniciar Conexão Bancária Segura", type="primary"):
+            with st.spinner("Gerando passe de segurança temporário..."):
                 chave_api = obter_token_pluggy()
-                
                 if chave_api:
-                    st.success("✅ Conexão estabelecida! Listando instituições suportadas...")
-                    bancos_oficiais = listar_bancos_pluggy(chave_api)
-                    
-                    if bancos_oficiais:
-                        cols = st.columns(4)
-                        for idx, banco in enumerate(bancos_oficiais[:8]): 
-                            with cols[idx % 4]:
-                                st.markdown(f'<div class="pluggy-card">{banco["name"]}</div>', unsafe_allow_html=True)
-                                st.write("")
+                    connect_token = obter_connect_token(chave_api)
+                    if connect_token:
+                        st.success("✅ Passe gerado! O Widget de conexão carregou logo abaixo.")
                         
-                        st.markdown("---")
-                        st.write("**Aviso:** A renderização completa do Widget seguro de digitação de senha requer a inclusão do SDK Javascript da Pluggy no Streamlit.")
+                        # O Código Mágico do Frontend (Javascript embutido no Streamlit)
+                        html_code = f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <script src="https://cdn.pluggy.ai/pluggy-connect/v1.2.0/pluggy-connect.js"></script>
+                        </head>
+                        <body style="display:flex; justify-content:center; padding-top:20px; font-family:sans-serif;">
+                            
+                            <button id="abrir-pluggy" style="background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                🏦 Abrir Janela do Banco
+                            </button>
+
+                            <script>
+                                document.getElementById('abrir-pluggy').onclick = function() {{
+                                    const pluggyConnect = new PluggyConnect({{
+                                        connectToken: '{connect_token}',
+                                        onSuccess: (itemData) => {{
+                                            alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nO seu Item ID é: " + itemData.item.id + "\\n\\nNo futuro, o sistema Python vai usar esse ID para puxar as transações automaticamente. Pode fechar esta caixa e voltar ao painel.");
+                                        }},
+                                        onError: (error) => {{
+                                            alert("Erro na conexão: " + error.message);
+                                        }}
+                                    }});
+                                    pluggyConnect.init();
+                                }};
+                            </script>
+                        </body>
+                        </html>
+                        """
+                        components.html(html_code, height=150)
                     else:
-                        st.warning("Não foi possível listar os bancos no momento.")
+                        st.error("Falha ao gerar o Connect Token.")
                 else:
-                    st.error("Falha na autenticação. Verifique suas credenciais no cofre.")
+                    st.error("Falha na autenticação da Pluggy. Verifique as chaves no Cofre.")
