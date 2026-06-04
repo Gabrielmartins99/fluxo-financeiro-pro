@@ -11,7 +11,6 @@ from supabase import create_client, Client
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
-# Inicializa a conexão com a nuvem (usando cache para não reconectar toda a hora)
 @st.cache_resource
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -43,7 +42,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO (TELA DE LOGIN)
+# 3. SISTEMA DE AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
@@ -74,14 +73,13 @@ if not st.session_state.user_email:
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
                     try:
                         res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                        st.success("✅ Conta criada com sucesso! Pode clicar na aba '🔒 Entrar' ao lado e fazer o seu login agora mesmo.")
+                        st.success("✅ Conta criada com sucesso! Pode fazer o seu login agora mesmo na aba ao lado.")
                     except Exception as e:
                         st.error("Erro ao criar conta. Verifique os dados inseridos.")
-    
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES DE BANCO DE DADOS E LISTAS BASE
+# 4. FUNÇÕES BASE
 # ========================================================
 def carregar_dados():
     try:
@@ -96,8 +94,7 @@ def carregar_dados():
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
             return df
     except Exception as e:
-        st.error(f"Erro ao carregar banco: {e}")
-    
+        pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"])
 
 df = carregar_dados()
@@ -123,16 +120,16 @@ with c_head2:
         supabase.auth.sign_out()
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🔌 Open Finance"])
+# --- NOVO MENU DE ABAS ---
+aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. ABA DASHBOARD (NOVO KILLER DASHBOARD)
+# 6. ABA DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual (Evolução)"])
         
-        # --- SUB-ABA: VISÃO MENSAL ---
         with dash_mensal:
             col_filtro1, col_filtro2 = st.columns(2)
             with col_filtro1:
@@ -153,42 +150,33 @@ with aba_dashboard:
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_graf1, col_graf2 = st.columns(2)
-                
                 with col_graf1:
                     fig1 = px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                     st.plotly_chart(fig1, use_container_width=True)
-                
                 with col_graf2:
                     df_top = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
                     fig2 = px.bar(df_top, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Despesas", text_auto='.2s', color="Valor", color_continuous_scale="Reds")
                     fig2.update_layout(yaxis={'categoryorder':'total ascending'})
                     st.plotly_chart(fig2, use_container_width=True)
         
-        # --- SUB-ABA: VISÃO ANUAL ---
         with dash_anual:
             st.markdown("### 📈 Evolução do Patrimônio e Análise Profunda")
-            
             df_evolucao = df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index()
-            fig_evo = px.bar(df_evolucao, x="Competencia", y="Valor", color="Tipo", barmode="group", 
-                             title="Receitas vs Despesas ao Longo do Tempo", 
-                             color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626"})
+            fig_evo = px.bar(df_evolucao, x="Competencia", y="Valor", color="Tipo", barmode="group", title="Receitas vs Despesas ao Longo do Tempo", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626"})
             st.plotly_chart(fig_evo, use_container_width=True)
             
             st.markdown("---")
             col_anual1, col_anual2 = st.columns(2)
-            
             with col_anual1:
                 df_banco = df[df["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
                 fig_banco = px.pie(df_banco, values="Valor", names="Conta_Cartao", title="Despesas por Conta/Cartão", hole=0.3, color_discrete_sequence=px.colors.sequential.Blues_r)
                 st.plotly_chart(fig_banco, use_container_width=True)
-                
             with col_anual2:
                 df_resp = df[df["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
-                fig_resp = px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável (Família/Sócios)", hole=0.3, color_discrete_sequence=px.colors.qualitative.Set2)
+                fig_resp = px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável", hole=0.3, color_discrete_sequence=px.colors.qualitative.Set2)
                 st.plotly_chart(fig_resp, use_container_width=True)
-
     else:
-        st.info("O Dashboard está aguardando lançamentos. Registre ou importe suas movimentações para ver a mágica acontecer!")
+        st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
 # 7. ABA LANÇAMENTOS
@@ -199,20 +187,16 @@ with aba_lancamentos:
     with aba_manual:
         st.subheader("Registrar Movimentação Avançada")
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
             data_compra = st.date_input("Data da Compra")
             valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
-            
             st.markdown("---")
             modo_lancamento = st.radio("Como é este lançamento?", ["Único (À vista)", "Parcelado", "Assinatura Mensal (Recorrente)"])
-            
         with col2:
             categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
             conta_cartao = st.selectbox("Conta / Cartão", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
             descricao = st.text_input("Descrição (Ex: Netflix, iFood)")
-            
             st.markdown("---")
             if modo_lancamento == "Parcelado":
                 parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
@@ -220,14 +204,12 @@ with aba_lancamentos:
                 parcelas = st.number_input("Projetar por quantos meses?", min_value=2, max_value=60, value=12)
             else:
                 parcelas = 1
-                
         with col3:
             responsavel = st.selectbox("Dono do Gasto (Responsável)", obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]))
             mes_fatura = st.date_input("Mês da 1ª Fatura/Cobrança")
 
         if st.button("💾 Lançar no Sistema", type="primary") and valor_total > 0:
             novas_linhas = []
-            
             if modo_lancamento == "Parcelado":
                 valor_por_mes = valor_total / parcelas
                 info_parcela = lambda i: f"{i+1}/{parcelas}"
@@ -242,25 +224,16 @@ with aba_lancamentos:
                 m = mes_fatura.month - 1 + i
                 y = mes_fatura.year + (m // 12)
                 comp = f"{y}-{(m % 12) + 1:02d}"
-                
                 novas_linhas.append({
-                    "user_email": st.session_state.user_email,
-                    "data_compra": data_compra.strftime("%Y-%m-%d"),
-                    "competencia": comp,
-                    "tipo": tipo, 
-                    "categoria": categoria, 
-                    "subcategoria": "Geral",
-                    "conta_cartao": conta_cartao, 
-                    "valor": float(round(valor_por_mes, 2)),
-                    "descricao": descricao, 
-                    "parcela": info_parcela(i),
-                    "responsavel": responsavel, 
+                    "user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"),
+                    "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral",
+                    "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)),
+                    "descricao": descricao, "parcela": info_parcela(i), "responsavel": responsavel, 
                     "status": "Pago" if i == 0 else "Pendente"
                 })
-                
             try:
                 supabase.table("lancamentos").insert(novas_linhas).execute()
-                st.success(f"✅ Lançamento processado! {parcelas} registros foram criados no banco de dados.")
+                st.success("✅ Lançamento processado com sucesso!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
@@ -268,8 +241,7 @@ with aba_lancamentos:
 
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
-        st.info("**💡 Dica de Ouro:** Não use PDFs! Vá no aplicativo do seu banco, acesse a fatura e procure pela opção **'Exportar'**. Escolha o formato **CSV** ou **Excel**.")
-        
+        st.info("**💡 Dica:** Exporte sua fatura em CSV/Excel pelo App do banco e anexe abaixo.")
         banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
         arquivo = st.file_uploader("Anexe o arquivo da fatura aqui", type=["csv", "xlsx", "xls"])
         
@@ -280,65 +252,78 @@ with aba_lancamentos:
                 else:
                     df_fatura = pd.read_excel(arquivo)
                 
-                if "Categoria_Sistema" not in df_fatura.columns:
-                    df_fatura["Categoria_Sistema"] = "Outros"
-                if "Tipo_Sistema" not in df_fatura.columns:
-                    df_fatura["Tipo_Sistema"] = "Despesa"
+                if "Categoria_Sistema" not in df_fatura.columns: df_fatura["Categoria_Sistema"] = "Outros"
+                if "Tipo_Sistema" not in df_fatura.columns: df_fatura["Tipo_Sistema"] = "Despesa"
                     
-                st.success("✅ Arquivo lido com sucesso! Siga as instruções abaixo para mapear os dados.")
-                
-                st.write("### 📍 Passo 1: Onde estão as informações principais?")
+                st.success("✅ Arquivo lido. Mapeie as colunas abaixo:")
                 c1, c2, c3 = st.columns(3)
                 col_data = c1.selectbox("Qual coluna contém a Data?", df_fatura.columns)
                 col_desc = c2.selectbox("Qual coluna contém a Descrição?", df_fatura.columns)
                 col_valor = c3.selectbox("Qual coluna contém o Valor?", df_fatura.columns)
-                
-                st.write("### ✍️ Passo 2: Categorize seus gastos")
-                st.write("Dê dois cliques nas colunas **Categoria_Sistema** e **Tipo_Sistema** na tabela abaixo para ajustar os gastos antes de salvar.")
                 
                 df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
                 
                 if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
                     novas_linhas = []
                     mes_atual = datetime.now().strftime("%Y-%m")
-                    
                     for index, row in df_editado.iterrows():
                         try:
                             val_str = str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip()
                             val = float(val_str)
                             if val == 0: continue
-                        except:
-                            val = 0.0
-                            
+                        except: val = 0.0
                         novas_linhas.append({
-                            "user_email": st.session_state.user_email,
-                            "data_compra": str(row[col_data])[:10],
-                            "competencia": mes_atual,
-                            "tipo": row.get("Tipo_Sistema", "Despesa"),
-                            "categoria": row.get("Categoria_Sistema", "Outros"),
-                            "subcategoria": "Importado",
-                            "conta_cartao": banco_selecionado,
-                            "valor": abs(val),
-                            "descricao": str(row[col_desc]),
-                            "parcela": "Fatura",
-                            "responsavel": "Eu",
-                            "status": "Pago"
+                            "user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10],
+                            "competencia": mes_atual, "tipo": row.get("Tipo_Sistema", "Despesa"),
+                            "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Importado",
+                            "conta_cartao": banco_selecionado, "valor": abs(val),
+                            "descricao": str(row[col_desc]), "parcela": "Fatura",
+                            "responsavel": "Eu", "status": "Pago"
                         })
-                        
                     if novas_linhas:
                         supabase.table("lancamentos").insert(novas_linhas).execute()
-                        st.success(f"✅ Fenomenal! {len(novas_linhas)} lançamentos importados com sucesso para a nuvem!")
+                        st.success(f"✅ {len(novas_linhas)} lançamentos importados para a nuvem!")
                         time.sleep(2)
                         st.rerun()
-                    else:
-                        st.warning("Nenhum dado válido encontrado. Certifique-se de ter mapeado as colunas corretamente.")
-                    
             except Exception as e:
-                st.error(f"Erro ao processar arquivo. Verifique se o formato está correto. Erro técnico: {e}")
+                st.error(f"Erro ao processar arquivo: {e}")
 
 # ========================================================
-# 8. ABA OPEN FINANCE
+# 8. ABA ASSISTENTE IA (NOVO CÉREBRO DIGITAL)
+# ========================================================
+with aba_assistente:
+    st.markdown("### 🤖 Cérebro Digital - O seu Assistente Pessoal")
+    st.write("Converse com a inteligência do sistema. Em breve, a IA poderá lançar despesas, analisar gráficos e dar conselhos de economia baseados nos seus dados, tudo pelo chat!")
+    
+    # Gerenciador de histórico de chat na sessão do usuário
+    if "mensagens_chat" not in st.session_state:
+        st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Eu sou o Assistente IA do Fluxo Financeiro PRO. Como posso ajudar com os seus lançamentos hoje?"}]
+
+    # Exibe o histórico de mensagens na tela
+    for msg in st.session_state.mensagens_chat:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Caixa de texto onde o usuário digita
+    prompt = st.chat_input("Digite algo como: 'Gastei 50 no iFood no cartão Nubank hoje'")
+    
+    if prompt:
+        # Adiciona a mensagem do usuário à tela
+        st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Resposta temporária da IA (Placeholder)
+        resposta_ia = f"Recebi a sua mensagem: *'{prompt}'*. Como estamos finalizando a conexão do meu 'cérebro', registrei o pedido, mas ainda não lancei no Supabase. No próximo passo, vamos ativar a minha chave de acesso!"
+        
+        # Adiciona a resposta da IA à tela
+        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta_ia})
+        with st.chat_message("assistant"):
+            st.markdown(resposta_ia)
+
+# ========================================================
+# 9. ABA OPEN FINANCE
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Aberta")
-    st.info("A infraestrutura do banco de dados na nuvem (Supabase) foi configurada com sucesso. A conexão via Hub Integrador será iniciada na próxima etapa.")
+    st.info("A infraestrutura do banco de dados na nuvem foi configurada com sucesso. A conexão via Hub Integrador será iniciada na próxima etapa.")
