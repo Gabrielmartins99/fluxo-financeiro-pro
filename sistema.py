@@ -45,7 +45,7 @@ st.markdown("""
         .title-gradient { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px; }
         div[data-baseweb="input"], .stSelectbox div { border-radius: 10px !important; }
         div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px; }
-        .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
+        .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
         .status-box { padding: 20px; border-radius: 10px; background-color: #ECFDF5; border: 1px solid #10B981; color: #065F46; font-weight: bold; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
@@ -92,7 +92,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE
+# 4. FUNÇÕES BASE E LISTAS INTELIGENTES
 # ========================================================
 def carregar_dados():
     try:
@@ -107,10 +107,12 @@ def carregar_dados():
 
 df = carregar_dados()
 
+# Função atualizada: Puxa o que está no banco, junta com as bases, e não repete.
 def obter_opcoes(coluna, lista_base):
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
-        return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
+        lista_completa = list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]]))
+        return sorted(lista_completa)
     return sorted(lista_base)
 
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
@@ -131,7 +133,7 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD (AGORA COM METAS)
+# 6. DASHBOARD (AGORA COM INVESTIMENTOS SEPARADOS)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
@@ -141,90 +143,161 @@ with aba_dashboard:
             col_filtro1, _ = st.columns(2)
             with col_filtro1:
                 mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
+            
             df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
+            
             t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
             t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {t_rec - t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
+            saldo_liquido = t_rec - t_desp - t_inv
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Conta (Sobra)</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
             c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
-            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Despesas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            c4.markdown(f'<div class="executive-box" style="border-top: 4px solid #8B5CF6;"><div class="term-label">Investido (💼)</div><div class="term-amount" style="color:#8B5CF6;">R$ {t_inv:,.2f}</div></div>', unsafe_allow_html=True)
+            
             if t_desp > 0:
+                st.markdown("<br>", unsafe_allow_html=True)
                 col_graf1, col_graf2 = st.columns(2)
-                with col_graf1: st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria"), use_container_width=True)
-                with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Despesas"), use_container_width=True)
+                with col_graf1: st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
+                with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
         
         with dash_anual:
-            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal"), use_container_width=True)
+            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal (Receitas vs Despesas vs Investimentos)", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
             
         with dash_metas:
             st.markdown("### Controle de Gastos por Categoria")
-            st.write("Defina um teto de gastos e acompanhe o seu consumo no mês atual em tempo real.")
-            
             c_meta1, c_meta2 = st.columns([1, 2])
             with c_meta1:
                 with st.container(border=True):
                     st.markdown("#### Nova Meta")
-                    cat_meta = st.selectbox("Escolha a Categoria", [c for c in LISTA_CATEGORIAS if c not in ["Salário", "Investimentos"]])
+                    cat_meta = st.selectbox("Escolha a Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
                     limite_meta = st.number_input("Limite Máximo (R$)", min_value=0.0, value=500.0, step=50.0)
                     if st.button("Salvar Meta", type="primary", use_container_width=True):
                         st.session_state.orcamentos[cat_meta] = limite_meta
                         st.success(f"Meta para {cat_meta} registrada!")
                         time.sleep(1)
                         st.rerun()
-                        
             with c_meta2:
                 mes_atual_metas = datetime.now().strftime("%Y-%m")
                 st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
                 df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
-                
                 if not st.session_state.orcamentos:
-                    st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado para começar.")
+                    st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
                         gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
-                        
-                        # Evita divisão por zero
-                        if limite > 0:
-                            percentual = min(gasto_atual / limite, 1.0)
-                        else:
-                            percentual = 1.0 if gasto_atual > 0 else 0.0
-                            
-                        # Exibição visual
+                        percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
                         st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
                         st.progress(percentual)
-                        
-                        if percentual >= 1.0:
-                            st.error("🚨 Orçamento estourado nesta categoria!")
-                        elif percentual >= 0.8:
-                            st.warning("⚠️ Atenção! Você está muito perto de atingir o limite.")
+                        if percentual >= 1.0: st.error("🚨 Orçamento estourado nesta categoria!")
+                        elif percentual >= 0.8: st.warning("⚠️ Atenção! Perto do limite.")
                         st.markdown("---")
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E 8. ASSISTENTE IA
+# 7. LANÇAMENTOS (AVANÇADO E DINÂMICO)
 # ========================================================
 with aba_lancamentos:
     st.subheader("Registrar Movimentação")
+    st.write("Dica: Selecione '➕ Novo(a)...' nas listas abaixo para adicionar seus próprios nomes de contas, responsáveis ou categorias.")
+    
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
-        data_compra = st.date_input("Data")
-        valor_total = st.number_input("Valor Total (R$)", min_value=0.0)
+        tipo = st.selectbox("Tipo", ["Despesa", "Receita", "Investimento"])
+        data_compra = st.date_input("Data do Ocorrido")
+        valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+        st.markdown("---")
+        modo_lancamento = st.radio("Frequência do Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"])
+        
     with col2:
-        categoria = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
-        conta_cartao = st.selectbox("Conta", obter_opcoes("Conta_Cartao", LISTA_BANCOS))
-        descricao = st.text_input("Descrição")
+        # Categoria Dinâmica
+        opcoes_cat = obter_opcoes("Categoria", LISTA_CATEGORIAS) + ["➕ Nova Categoria..."]
+        cat_sel = st.selectbox("Categoria", opcoes_cat)
+        if cat_sel == "➕ Nova Categoria...":
+            categoria = st.text_input("Digite o nome da Nova Categoria:")
+        else:
+            categoria = cat_sel
+
+        # Conta Dinâmica
+        opcoes_conta = obter_opcoes("Conta_Cartao", LISTA_BANCOS) + ["➕ Nova Conta..."]
+        conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
+        if conta_sel == "➕ Nova Conta...":
+            conta_cartao = st.text_input("Digite o nome da Nova Conta/Cartão:")
+        else:
+            conta_cartao = conta_sel
+
+        descricao = st.text_input("Descrição (Ex: Supermercado, Nubank)")
+        st.markdown("---")
+        
+        # Lógica de Parcelas
+        if modo_lancamento == "Parcelado":
+            parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
+        elif modo_lancamento == "Assinatura Mensal":
+            parcelas = st.number_input("Projetar por quantos meses para frente?", min_value=2, max_value=60, value=12)
+        else:
+            parcelas = 1
+
     with col3:
-        responsavel = st.selectbox("Responsável", obter_opcoes("Responsavel", ["Eu", "Família", "Empresa"]))
-        mes_fatura = st.date_input("Mês Competência")
+        # Responsável Dinâmico
+        opcoes_resp = obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]) + ["➕ Novo Responsável..."]
+        resp_sel = st.selectbox("Dono do Gasto (Responsável)", opcoes_resp)
+        if resp_sel == "➕ Novo Responsável...":
+            responsavel = st.text_input("Digite o nome do Novo Responsável:")
+        else:
+            responsavel = resp_sel
 
-    if st.button("💾 Salvar Lançamento", type="primary") and valor_total > 0:
-        comp = f"{mes_fatura.year}-{mes_fatura.month:02d}"
-        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(valor_total), "descricao": descricao, "parcela": "Única", "responsavel": responsavel, "status": "Pago"}).execute()
-        st.success("Salvo com sucesso!")
-        time.sleep(1)
-        st.rerun()
+        mes_fatura = st.date_input("Mês da 1ª Cobrança / Competência")
 
+    if st.button("💾 Gravar no Sistema", type="primary", use_container_width=True):
+        if valor_total > 0 and categoria and conta_cartao and responsavel:
+            novas_linhas = []
+            
+            if modo_lancamento == "Parcelado":
+                valor_por_mes = valor_total / parcelas
+                info_parcela = lambda i: f"{i+1}/{parcelas}"
+            elif modo_lancamento == "Assinatura Mensal":
+                valor_por_mes = valor_total 
+                info_parcela = lambda i: "Recorrente"
+            else:
+                valor_por_mes = valor_total
+                info_parcela = lambda i: "À vista"
+
+            for i in range(parcelas):
+                m = mes_fatura.month - 1 + i
+                y = mes_fatura.year + (m // 12)
+                comp = f"{y}-{(m % 12) + 1:02d}"
+                
+                novas_linhas.append({
+                    "user_email": st.session_state.user_email,
+                    "data_compra": data_compra.strftime("%Y-%m-%d"),
+                    "competencia": comp,
+                    "tipo": tipo,
+                    "categoria": categoria,
+                    "subcategoria": "Geral",
+                    "conta_cartao": conta_cartao,
+                    "valor": float(round(valor_por_mes, 2)),
+                    "descricao": descricao,
+                    "parcela": info_parcela(i),
+                    "responsavel": responsavel,
+                    "status": "Pago" if i == 0 else "Pendente"
+                })
+                
+            try:
+                supabase.table("lancamentos").insert(novas_linhas).execute()
+                st.success("✅ Lançamento processado com sucesso!")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+        else:
+            st.warning("Preencha o valor, categoria, conta e responsável para salvar.")
+
+# ========================================================
+# 8. ASSISTENTE IA
+# ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
