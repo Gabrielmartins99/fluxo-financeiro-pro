@@ -51,10 +51,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO E VARIÁVEIS DE SESSÃO
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
+
+if "orcamentos" not in st.session_state:
+    st.session_state.orcamentos = {}
 
 cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
 
@@ -128,11 +131,12 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD (AGORA COM METAS)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual"])
+        dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
+        
         with dash_mensal:
             col_filtro1, _ = st.columns(2)
             with col_filtro1:
@@ -148,8 +152,52 @@ with aba_dashboard:
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria"), use_container_width=True)
                 with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Despesas"), use_container_width=True)
+        
         with dash_anual:
             st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal"), use_container_width=True)
+            
+        with dash_metas:
+            st.markdown("### Controle de Gastos por Categoria")
+            st.write("Defina um teto de gastos e acompanhe o seu consumo no mês atual em tempo real.")
+            
+            c_meta1, c_meta2 = st.columns([1, 2])
+            with c_meta1:
+                with st.container(border=True):
+                    st.markdown("#### Nova Meta")
+                    cat_meta = st.selectbox("Escolha a Categoria", [c for c in LISTA_CATEGORIAS if c not in ["Salário", "Investimentos"]])
+                    limite_meta = st.number_input("Limite Máximo (R$)", min_value=0.0, value=500.0, step=50.0)
+                    if st.button("Salvar Meta", type="primary", use_container_width=True):
+                        st.session_state.orcamentos[cat_meta] = limite_meta
+                        st.success(f"Meta para {cat_meta} registrada!")
+                        time.sleep(1)
+                        st.rerun()
+                        
+            with c_meta2:
+                mes_atual_metas = datetime.now().strftime("%Y-%m")
+                st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
+                df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
+                
+                if not st.session_state.orcamentos:
+                    st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado para começar.")
+                else:
+                    for cat, limite in st.session_state.orcamentos.items():
+                        gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
+                        
+                        # Evita divisão por zero
+                        if limite > 0:
+                            percentual = min(gasto_atual / limite, 1.0)
+                        else:
+                            percentual = 1.0 if gasto_atual > 0 else 0.0
+                            
+                        # Exibição visual
+                        st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
+                        st.progress(percentual)
+                        
+                        if percentual >= 1.0:
+                            st.error("🚨 Orçamento estourado nesta categoria!")
+                        elif percentual >= 0.8:
+                            st.warning("⚠️ Atenção! Você está muito perto de atingir o limite.")
+                        st.markdown("---")
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
