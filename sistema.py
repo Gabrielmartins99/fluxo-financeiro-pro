@@ -3,19 +3,31 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import time
+import json
 from supabase import create_client, Client
+import google.generativeai as genai
 
 # ========================================================
-# 1. CREDENCIAIS DO BANCO DE DADOS (SUPABASE)
+# 1. CREDENCIAIS DE BANCO DE DADOS E INTELIGÊNCIA ARTIFICIAL
 # ========================================================
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
+
+# 🔑 COLE A SUA CHAVE DO GOOGLE AI STUDIO AQUI DENTRO DAS ASPAS:
+GEMINI_API_KEY = "COLE_SUA_CHAVE_COPIADA_AQUI" 
 
 @st.cache_resource
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase: Client = init_connection()
+
+# Configuração do Cérebro da IA
+if GEMINI_API_KEY != "COLE_SUA_CHAVE_COPIADA_AQUI":
+    genai.configure(api_key=GEMINI_API_KEY)
+    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    modelo_ia = None
 
 # ========================================================
 # 2. CONFIGURAÇÃO VISUAL E CSS PREMIUM
@@ -120,7 +132,6 @@ with c_head2:
         supabase.auth.sign_out()
         st.rerun()
 
-# --- NOVO MENU DE ABAS ---
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
@@ -289,37 +300,92 @@ with aba_lancamentos:
                 st.error(f"Erro ao processar arquivo: {e}")
 
 # ========================================================
-# 8. ABA ASSISTENTE IA (NOVO CÉREBRO DIGITAL)
+# 8. ABA ASSISTENTE IA (O CÉREBRO DIGITAL ATIVO)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - O seu Assistente Pessoal")
-    st.write("Converse com a inteligência do sistema. Em breve, a IA poderá lançar despesas, analisar gráficos e dar conselhos de economia baseados nos seus dados, tudo pelo chat!")
     
-    # Gerenciador de histórico de chat na sessão do usuário
-    if "mensagens_chat" not in st.session_state:
-        st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Eu sou o Assistente IA do Fluxo Financeiro PRO. Como posso ajudar com os seus lançamentos hoje?"}]
+    if not modelo_ia:
+        st.warning("⚠️ O Cérebro ainda está dormindo. Cole a sua chave da API do Google na Seção 1 do código para acordá-lo!")
+    else:
+        # Inicializa a memória da conversa
+        if "mensagens_chat" not in st.session_state:
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Eu sou o Assistente IA do Fluxo Financeiro PRO. Pode conversar comigo ou me pedir para registrar um gasto (ex: 'Gastei 50 no iFood no Nubank hoje')."}]
 
-    # Exibe o histórico de mensagens na tela
-    for msg in st.session_state.mensagens_chat:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        # Renderiza a conversa
+        for msg in st.session_state.mensagens_chat:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-    # Caixa de texto onde o usuário digita
-    prompt = st.chat_input("Digite algo como: 'Gastei 50 no iFood no cartão Nubank hoje'")
-    
-    if prompt:
-        # Adiciona a mensagem do usuário à tela
-        st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        # Onde o usuário digita
+        prompt = st.chat_input("Digite sua mensagem aqui...")
         
-        # Resposta temporária da IA (Placeholder)
-        resposta_ia = f"Recebi a sua mensagem: *'{prompt}'*. Como estamos finalizando a conexão do meu 'cérebro', registrei o pedido, mas ainda não lancei no Supabase. No próximo passo, vamos ativar a minha chave de acesso!"
-        
-        # Adiciona a resposta da IA à tela
-        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta_ia})
-        with st.chat_message("assistant"):
-            st.markdown(resposta_ia)
+        if prompt:
+            st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Processando..."):
+                    try:
+                        # O Prompt de Comando secreto que a IA recebe para agir como sistema
+                        instrucao_sistema = f"""
+                        Você é o assistente financeiro do aplicativo 'Fluxo Financeiro PRO'.
+                        O usuário disse: "{prompt}"
+                        
+                        Se for apenas uma conversa, dúvida ou conselho financeiro, responda normalmente, de forma amigável e curta.
+                        
+                        Se o usuário estiver relatando um GASTO ou uma RECEITA, você deve responder amigavelmente confirmando que registrou E, no final da sua resposta, incluir EXATAMENTE este bloco de código JSON abaixo preenchido com os dados que você extraiu da frase do usuário (use as categorias: Alimentação, Transporte, Moradia, Salário, Lazer, Saúde, Educação, Investimentos, Outros):
+                        
+                        ```json
+                        {{
+                            "acao": "registrar",
+                            "tipo": "Despesa",
+                            "valor": 0.00,
+                            "descricao": "",
+                            "categoria": "",
+                            "conta": ""
+                        }}
+                        ```
+                        """
+                        
+                        # Chama a API do Google Gemini
+                        resposta = modelo_ia.generate_content(instrucao_sistema)
+                        texto_resposta = resposta.text
+                        
+                        # Limpa a tela para não mostrar o código JSON feio pro usuário
+                        texto_limpo = texto_resposta.split("```json")[0].strip()
+                        st.markdown(texto_limpo)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
+                        
+                        # Se a IA detectou um gasto e gerou o JSON, o sistema intercepta e salva no Supabase!
+                        if "```json" in texto_resposta:
+                            bloco_json = texto_resposta.split("```json")[1].split("```")[0].strip()
+                            dados_ia = json.loads(bloco_json)
+                            
+                            if dados_ia.get("acao") == "registrar":
+                                mes_atual = datetime.now().strftime("%Y-%m")
+                                data_hoje = datetime.now().strftime("%Y-%m-%d")
+                                
+                                nova_linha = {
+                                    "user_email": st.session_state.user_email,
+                                    "data_compra": data_hoje,
+                                    "competencia": mes_atual,
+                                    "tipo": dados_ia.get("tipo", "Despesa"),
+                                    "categoria": dados_ia.get("categoria", "Outros"),
+                                    "subcategoria": "Lançado via IA",
+                                    "conta_cartao": dados_ia.get("conta", "Conta Automática"),
+                                    "valor": float(dados_ia.get("valor", 0.0)),
+                                    "descricao": dados_ia.get("descricao", "Lançamento via Assistente"),
+                                    "parcela": "À vista",
+                                    "responsavel": "Eu",
+                                    "status": "Pago"
+                                }
+                                supabase.table("lancamentos").insert(nova_linha).execute()
+                                st.toast("✅ Mágica Feita! A IA gravou o dado diretamente no banco.")
+                                
+                    except Exception as e:
+                        st.error(f"Erro de comunicação com o Cérebro IA: {e}")
 
 # ========================================================
 # 9. ABA OPEN FINANCE
