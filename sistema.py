@@ -135,7 +135,7 @@ def obter_opcoes(coluna, lista_base):
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
-# Geração de Tokens da Pluggy
+# Motor da Pluggy (Corrigido o endpoint do connect_token)
 def obter_token_pluggy():
     if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET: return None
     url = "https://api.pluggy.ai/auth"
@@ -146,7 +146,7 @@ def obter_token_pluggy():
     return None
 
 def obter_connect_token(api_key):
-    url = "https://api.pluggy.ai/connect_tokens"
+    url = "https://api.pluggy.ai/connect_token"  # <- O erro estava aqui. O "s" no final foi removido.
     try:
         res = requests.post(url, headers={"accept": "application/json", "content-type": "application/json", "X-API-KEY": api_key})
         if res.status_code == 200: return res.json().get("accessToken")
@@ -224,7 +224,7 @@ with aba_dashboard:
         st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
-# 7. ABA LANÇAMENTOS E 8. ABA ASSISTENTE IA
+# 7. ABA LANÇAMENTOS
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
@@ -297,6 +297,9 @@ with aba_lancamentos:
                     time.sleep(1)
                     st.rerun()
 
+# ========================================================
+# 8. ABA ASSISTENTE IA
+# ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
@@ -363,9 +366,8 @@ with aba_openfinance:
                 if chave_api:
                     connect_token = obter_connect_token(chave_api)
                     if connect_token:
-                        st.success("✅ Passe gerado! O Widget de conexão carregou logo abaixo.")
+                        st.success("✅ Passe gerado com sucesso! O Widget de conexão carregou logo abaixo.")
                         
-                        # O Código Mágico do Frontend (Javascript embutido no Streamlit)
                         html_code = f"""
                         <!DOCTYPE html>
                         <html>
@@ -397,6 +399,6 @@ with aba_openfinance:
                         """
                         components.html(html_code, height=150)
                     else:
-                        st.error("Falha ao gerar o Connect Token.")
+                        st.error("A Pluggy reconheceu as chaves, mas falhou ao gerar o Connect Token.")
                 else:
                     st.error("Falha na autenticação da Pluggy. Verifique as chaves no Cofre.")
