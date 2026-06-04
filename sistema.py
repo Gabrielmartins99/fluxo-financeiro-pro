@@ -71,15 +71,20 @@ if not st.session_state.user_email:
                     except Exception as e:
                         st.error("E-mail ou senha incorretos. Tente novamente.")
                         
+         # --- CÓDIGO DA ABA DE REGISTRO (LOGIN DIRETO) ---
             with aba_registro:
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
+                
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
                     try:
+                        # Regista o utilizador no Supabase
                         res = supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                        st.success("Conta criada com sucesso! Você já pode fazer login na aba ao lado.")
+                        
+                        # Mensagem de sucesso sem pedir confirmação de e-mail
+                        st.success("✅ Conta criada com sucesso! Pode clicar na aba '🔒 Entrar' ao lado e fazer o seu login agora mesmo.")
                     except Exception as e:
-                        st.error(f"Erro ao criar conta. Verifique os dados.")
+                        st.error("Erro ao criar conta. Verifique os dados inseridos.")
     
     st.stop() # Bloqueia o resto do código até o usuário logar!
 
