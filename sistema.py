@@ -347,7 +347,7 @@ with aba_assistente:
                         
                         Se o usuário estiver relatando um GASTO ou uma RECEITA, você deve responder amigavelmente confirmando que registrou E, no final da sua resposta, incluir EXATAMENTE este bloco de código JSON abaixo preenchido com os dados que você extraiu da frase do usuário (use as categorias: Alimentação, Transporte, Moradia, Salário, Lazer, Saúde, Educação, Investimentos, Outros):
                         
-```json
+                        ```json
                         {{
                             "acao": "registrar",
                             "tipo": "Despesa",
@@ -366,8 +366,7 @@ with aba_assistente:
                         st.markdown(texto_limpo)
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
                         
-                        if "
-```json" in texto_resposta:
+                        if "```json" in texto_resposta:
                             bloco_json = texto_resposta.split("```json")[1].split("```")[0].strip()
                             dados_ia = json.loads(bloco_json)
                             
