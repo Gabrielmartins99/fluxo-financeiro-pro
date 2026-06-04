@@ -6,3 +6,4 @@ supabase
 google-generativeai
 extra-streamlit-components
 requests
+fpdf
