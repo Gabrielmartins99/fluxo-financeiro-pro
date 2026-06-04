@@ -273,14 +273,14 @@ with aba_lancamentos:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
-            if valor_total > 0 and category := categoria and account := conta_cartao and owner := responsavel:
+            if valor_total > 0 and categoria and conta_cartao and responsavel:
                 novas_linhas = []
                 valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
                 for i in range(parcelas):
                     m = mes_fatura.month - 1 + i
                     comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": category, "subcategoria": "Geral", "conta_cartao": account, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": owner, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("✅ Registrado com sucesso!")
@@ -355,15 +355,15 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA ("EFEITO PIERRE" TOTALMENTE PROTEGIDO)
+# 8. ASSISTENTE IA (BLINDAGEM COMPLETA CONTRA QUEBRAS)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital Financeiro")
-    st.write("Pergunte sobre gastos, iFood, períodos específicos ou peça conselhos de economia!")
+    st.write("Consulte históricos, faturas, iFood, períodos de datas ou peça conselhos!")
     
     if modelo_ia:
         if "mensagens_chat" not in st.session_state: 
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Sou seu consultor estilo Pierre. Pergunte qualquer coisa sobre seu histórico!"}]
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Sou seu assistente de finanças pessoal. Pode perguntar!"}]
         
         for msg in st.session_state.mensagens_chat:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
@@ -374,15 +374,22 @@ with aba_assistente:
             with st.chat_message("user"): st.markdown(prompt)
             
             with st.chat_message("assistant"):
-                with st.spinner("Analisando suas transações..."):
+                with st.spinner("Analisando registros..."):
                     try:
-                        # Compactado em uma linha curta para evitar cortes e quebras de string literal no GitHub
-                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Sem lancamentos."
+                        # Convertendo a tabela para string curta e compacta
+                        if not df.empty:
+                            hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False)
+                        else:
+                            hist_txt = "Sem dados."
                         
-                        # Criamos a instrução de forma limpa, direta e blindada contra quebras de aspas
-                        prompt_seguro = f"Atue como o bot financeiro Pierre. Base de dados: \n{hist_txt}\n Pergunta do usuario: {prompt}"
+                        # Engenharia de strings curtas e seguras concatenadas por blocos (Impede o corte de aspas triplas)
+                        regra1 = "Aja como o assistente de finanças Pierre do WhatsApp. "
+                        regra2 = "Analise o histórico e faça somas matemáticas se o usuário pedir períodos (ex: dia 1 ao 5) ou nomes específicos (ex: iFood).\n"
+                        regra3 = "Se ele pedir para cadastrar um gasto por texto, responda e gere um JSON no final com os dados.\n"
                         
-                        resposta = modelo_ia.generate_content(prompt_seguro)
+                        prompt_final = regra1 + regra2 + regra3 + "HISTÓRICO:\n" + hist_txt + "\nPERGUNTA: " + prompt
+                        
+                        resposta = modelo_ia.generate_content(prompt_final)
                         texto_resposta = resposta.text
                         
                         st.markdown(texto_resposta.split("```json")[0].strip())
@@ -394,7 +401,7 @@ with aba_assistente:
 ```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
                                 supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Gabriel", "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
-                                st.toast("✅ Registrado com sucesso via IA!")
+                                st.toast("✅ Sincronizado via Inteligência Artificial!")
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
