@@ -135,7 +135,6 @@ def obter_opcoes(coluna, lista_base):
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
-# Motor da Pluggy (Corrigido o endpoint do connect_token)
 def obter_token_pluggy():
     if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET: return None
     url = "https://api.pluggy.ai/auth"
@@ -146,7 +145,7 @@ def obter_token_pluggy():
     return None
 
 def obter_connect_token(api_key):
-    url = "https://api.pluggy.ai/connect_token"  # <- O erro estava aqui. O "s" no final foi removido.
+    url = "https://api.pluggy.ai/connect_token"
     try:
         res = requests.post(url, headers={"accept": "application/json", "content-type": "application/json", "X-API-KEY": api_key})
         if res.status_code == 200: return res.json().get("accessToken")
@@ -368,13 +367,16 @@ with aba_openfinance:
                     if connect_token:
                         st.success("✅ Passe gerado com sucesso! O Widget de conexão carregou logo abaixo.")
                         
+                        # Código atualizado para a V2 do Pluggy Connect e altura ajustada para não "esmagar" a tela
                         html_code = f"""
                         <!DOCTYPE html>
-                        <html>
+                        <html lang="pt-BR">
                         <head>
-                            <script src="https://cdn.pluggy.ai/pluggy-connect/v1.2.0/pluggy-connect.js"></script>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <script src="https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js"></script>
                         </head>
-                        <body style="display:flex; justify-content:center; padding-top:20px; font-family:sans-serif;">
+                        <body style="margin: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 20px; font-family: sans-serif; background-color: transparent;">
                             
                             <button id="abrir-pluggy" style="background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                                 🏦 Abrir Janela do Banco
@@ -382,13 +384,18 @@ with aba_openfinance:
 
                             <script>
                                 document.getElementById('abrir-pluggy').onclick = function() {{
+                                    // Esconde o botão para a janela do banco usar todo o espaço na tela
+                                    this.style.display = 'none';
+                                    
                                     const pluggyConnect = new PluggyConnect({{
                                         connectToken: '{connect_token}',
+                                        includeSandbox: true,
                                         onSuccess: (itemData) => {{
-                                            alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nO seu Item ID é: " + itemData.item.id + "\\n\\nNo futuro, o sistema Python vai usar esse ID para puxar as transações automaticamente. Pode fechar esta caixa e voltar ao painel.");
+                                            alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nO seu Item ID é: " + itemData.item.id + "\\n\\nPode fechar esta caixa e voltar ao painel.");
                                         }},
                                         onError: (error) => {{
                                             alert("Erro na conexão: " + error.message);
+                                            document.getElementById('abrir-pluggy').style.display = 'block';
                                         }}
                                     }});
                                     pluggyConnect.init();
@@ -397,7 +404,8 @@ with aba_openfinance:
                         </body>
                         </html>
                         """
-                        components.html(html_code, height=150)
+                        # A Mágica visual: aumentamos a altura para 700px para o Widget caber perfeitamente!
+                        components.html(html_code, height=700)
                     else:
                         st.error("A Pluggy reconheceu as chaves, mas falhou ao gerar o Connect Token.")
                 else:
