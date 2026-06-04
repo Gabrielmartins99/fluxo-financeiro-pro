@@ -11,7 +11,7 @@ import extra_streamlit_components as stx
 import streamlit.components.v1 as components
 
 # ========================================================
-# 1. CREDENCIAIS DE BANCO DE DADOS, IA E OPEN FINANCE
+# 1. CREDENCIAIS BASE
 # ========================================================
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
@@ -38,31 +38,24 @@ else:
     modelo_ia = None
 
 # ========================================================
-# 2. CONFIGURAÇÃO VISUAL E CSS PREMIUM
+# 2. CONFIGURAÇÃO VISUAL
 # ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #F8FAFC !important; color: #0F172A !important;
-        }
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #F8FAFC !important; color: #0F172A !important; }
         h1, h2, h3 { font-weight: 800 !important; letter-spacing: -1px !important; color: #0F172A !important; }
-        .title-gradient {
-            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px;
-        }
+        .title-gradient { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px; }
         div[data-baseweb="input"], .stSelectbox div { border-radius: 10px !important; }
-        div.stButton > button[kind="primary"] {
-            background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
-        }
+        div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px; }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
@@ -71,17 +64,14 @@ cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
 
 if st.session_state.user_email is None:
     cookie_email = cookie_manager.get(cookie="user_email")
-    if cookie_email:
-        st.session_state.user_email = cookie_email
+    if cookie_email: st.session_state.user_email = cookie_email
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.container(border=True):
             aba_login, aba_registro = st.tabs(["🔒 Entrar", "✨ Criar Conta"])
-            
             with aba_login:
                 email_login = st.text_input("E-mail corporativo ou pessoal", key="log_email")
                 senha_login = st.text_input("Senha de acesso", type="password", key="log_senha")
@@ -93,7 +83,6 @@ if not st.session_state.user_email:
                         st.rerun()
                     except Exception as e:
                         st.error("E-mail ou senha incorretos. Tente novamente.")
-                        
             with aba_registro:
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
@@ -106,22 +95,17 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E CONEXÃO PLUGGY
+# 4. FUNÇÕES BASE
 # ========================================================
 def carregar_dados():
     try:
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df = pd.DataFrame(response.data)
-            df = df.rename(columns={
-                "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria",
-                "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor",
-                "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status"
-            })
+            df = df.rename(columns={"data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status"})
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
             return df
-    except:
-        pass
+    except: pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status"])
 
 df = carregar_dados()
@@ -161,7 +145,7 @@ def listar_bancos_pluggy(api_key):
     return []
 
 # ========================================================
-# 5. HEADER DO USUÁRIO LOGADO
+# 5. HEADER
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -176,66 +160,39 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. ABA DASHBOARD
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual (Evolução)"])
-        
         with dash_mensal:
             col_filtro1, col_filtro2 = st.columns(2)
             with col_filtro1:
-                meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-                mes_selecionado = st.selectbox("Selecione o Mês / Fatura", ["Ver Tudo"] + meses_disponiveis)
-            
+                mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
             df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
-            
             t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
             t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
-            saldo = t_rec - t_desp
-            
             c1, c2, c3 = st.columns(3)
-            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {saldo:,.2f}</div></div>', unsafe_allow_html=True)
+            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {t_rec - t_desp:,.2f}</div></div>', unsafe_allow_html=True)
             c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
             c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
-            
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1:
-                    fig1 = px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-                    st.plotly_chart(fig1, use_container_width=True)
+                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4), use_container_width=True)
                 with col_graf2:
-                    df_top = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
-                    fig2 = px.bar(df_top, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Despesas", text_auto='.2s', color="Valor", color_continuous_scale="Reds")
-                    fig2.update_layout(yaxis={'categoryorder':'total ascending'})
-                    st.plotly_chart(fig2, use_container_width=True)
-        
+                    st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Despesas"), use_container_width=True)
         with dash_anual:
-            st.markdown("### 📈 Evolução do Patrimônio e Análise Profunda")
-            df_evolucao = df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index()
-            fig_evo = px.bar(df_evolucao, x="Competencia", y="Valor", color="Tipo", barmode="group", title="Receitas vs Despesas ao Longo do Tempo", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626"})
-            st.plotly_chart(fig_evo, use_container_width=True)
-            
-            st.markdown("---")
-            col_anual1, col_anual2 = st.columns(2)
-            with col_anual1:
-                df_banco = df[df["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
-                fig_banco = px.pie(df_banco, values="Valor", names="Conta_Cartao", title="Despesas por Conta/Cartão", hole=0.3, color_discrete_sequence=px.colors.sequential.Blues_r)
-                st.plotly_chart(fig_banco, use_container_width=True)
-            with col_anual2:
-                df_resp = df[df["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
-                fig_resp = px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável", hole=0.3, color_discrete_sequence=px.colors.qualitative.Set2)
-                st.plotly_chart(fig_resp, use_container_width=True)
+            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Receitas vs Despesas"), use_container_width=True)
     else:
         st.info("O Dashboard está aguardando lançamentos.")
 
 # ========================================================
-# 7. ABA LANÇAMENTOS
+# 7. LANÇAMENTOS
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
-    
     with aba_manual:
         st.subheader("Registrar Movimentação")
         col1, col2, col3 = st.columns(3)
@@ -258,20 +215,12 @@ with aba_lancamentos:
             valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
             for i in range(parcelas):
                 m = mes_fatura.month - 1 + i
-                y = mes_fatura.year + (m // 12)
-                comp = f"{y}-{(m % 12) + 1:02d}"
-                novas_linhas.append({
-                    "user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"),
-                    "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral",
-                    "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)),
-                    "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura" else "À vista", 
-                    "responsavel": responsavel, "status": "Pago" if i == 0 else "Pendente"
-                })
+                comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
+                novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura" else "À vista", "responsavel": responsavel, "status": "Pago" if i == 0 else "Pendente"})
             supabase.table("lancamentos").insert(novas_linhas).execute()
             st.success("Lançamento processado!")
             time.sleep(1)
             st.rerun()
-
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
         arquivo = st.file_uploader("Anexe sua fatura CSV/Excel", type=["csv", "xlsx", "xls"])
@@ -287,17 +236,9 @@ with aba_lancamentos:
             if st.button("🚀 Salvar Lançamentos", type="primary"):
                 novas_linhas = []
                 for index, row in df_editado.iterrows():
-                    try:
-                        val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
-                        if val == 0: continue
+                    try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
-                    novas_linhas.append({
-                        "user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10],
-                        "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"),
-                        "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado",
-                        "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura",
-                        "responsavel": "Eu", "status": "Pago"
-                    })
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "status": "Pago"})
                 if novas_linhas:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Importado!")
@@ -305,112 +246,69 @@ with aba_lancamentos:
                     st.rerun()
 
 # ========================================================
-# 8. ABA ASSISTENTE IA
+# 8. ASSISTENTE IA
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
     if modelo_ia:
-        if "mensagens_chat" not in st.session_state:
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Me peça para registrar um gasto!"}]
+        if "mensagens_chat" not in st.session_state: st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá! Me peça para registrar um gasto!"}]
         for msg in st.session_state.mensagens_chat:
-            with st.chat_message(msg["role"]): 
-                st.markdown(msg["content"])
-        
+            with st.chat_message(msg["role"]): st.markdown(msg["content"])
         prompt = st.chat_input("Digite sua mensagem...")
         if prompt:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): 
-                st.markdown(prompt)
-            
+            with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
                 with st.spinner("Processando..."):
                     try:
                         resposta = modelo_ia.generate_content(f'O usuário disse: "{prompt}". Se for um gasto, gere um JSON no final com acao: registrar, tipo, valor, descricao, categoria, conta.')
                         texto_resposta = resposta.text
-                        
-                        texto_limpo = texto_resposta.split("```json")[0].strip()
-                        st.markdown(texto_limpo)
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_limpo})
-                        
-                        if "
-```json" in texto_resposta:
-                            bloco_bruto = texto_resposta.split("```json")[1]
-                            bloco_json = bloco_bruto.split("
-```")[0].strip()
-                            dados_ia = json.loads(bloco_json)
-                            
+                        st.markdown(texto_resposta.split("```json")[0].strip())
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta.split("```json")[0].strip()})
+                        if "```json" in texto_resposta:
+                            dados_ia = json.loads(texto_resposta.split("```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
-                                nova_linha = {
-                                    "user_email": st.session_state.user_email, 
-                                    "data_compra": datetime.now().strftime("%Y-%m-%d"), 
-                                    "competencia": datetime.now().strftime("%Y-%m"), 
-                                    "tipo": dados_ia.get("tipo", "Despesa"), 
-                                    "categoria": dados_ia.get("categoria", "Outros"), 
-                                    "conta_cartao": dados_ia.get("conta", "IA"), 
-                                    "valor": float(dados_ia.get("valor", 0.0)), 
-                                    "descricao": dados_ia.get("descricao", "Assistente"), 
-                                    "parcela": "À vista", 
-                                    "responsavel": "Eu", 
-                                    "status": "Pago"
-                                }
-                                supabase.table("lancamentos").insert(nova_linha).execute()
+                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Eu", "status": "Pago"}).execute()
                                 st.toast("✅ Registrado pela IA!")
-                    except Exception as e:
-                        st.error(f"Erro de IA: {e}")
+                    except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 9. ABA OPEN FINANCE (O PLUGGY CONNECT REAL)
+# 9. OPEN FINANCE
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.write("Conecte suas contas bancárias para sincronização automática dos seus extratos.")
-    st.info("**Ambiente Sandbox (Grátis):** Nenhum dado real é cobrado. Use dados falsos de teste se o banco pedir na janela.")
-
+    st.info("**Ambiente Sandbox (Grátis):** Selecione o 'Pluggy Bank' na janela para simular.")
     if not PLUGGY_CLIENT_ID:
-        st.warning("⚠️ Credenciais da Pluggy ausentes no cofre (Secrets).")
+        st.warning("⚠️ Credenciais da Pluggy ausentes no cofre.")
     else:
         if st.button("🚀 Iniciar Conexão Bancária Segura", type="primary"):
-            with st.spinner("Gerando passe de segurança temporário..."):
+            with st.spinner("Gerando passe temporário..."):
                 chave_api = obter_token_pluggy()
                 if chave_api:
                     connect_token = obter_connect_token(chave_api)
                     if connect_token:
-                        # Engenharia Mágica: O Python descobre o ID do Banco Simulador e esconde os outros!
                         bancos = listar_bancos_pluggy(chave_api)
                         sandbox_ids = [b["id"] for b in bancos if "pluggy" in b["name"].lower() and "meu" not in b["name"].lower()]
                         filtro_js = f"connectorIds: {sandbox_ids}," if sandbox_ids else ""
-                        
-                        st.success("✅ Passe gerado! Sistema ativado no modo 'À Prova de Erros' (Listando apenas Bancos de Teste).")
+                        st.success("✅ Passe gerado! O Widget de conexão carregou logo abaixo.")
                         
                         html_code = f"""
                         <!DOCTYPE html>
                         <html lang="pt-BR">
-                        <head>
-                            <meta charset="UTF-8">
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                            <script src="https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js"></script>
-                        </head>
-                        <body style="margin: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 20px; font-family: sans-serif; background-color: transparent;">
-                            
-                            <button id="abrir-pluggy" style="background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <head><script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)"></script></head>
+                        <body style="margin:0; display:flex; justify-content:center; padding-top:20px; font-family:sans-serif;">
+                            <button id="abrir-pluggy" style="background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer;">
                                 🏦 Abrir Janela do Banco
                             </button>
-
                             <script>
                                 document.getElementById('abrir-pluggy').onclick = function() {{
                                     this.style.display = 'none';
-                                    
                                     const pluggyConnect = new PluggyConnect({{
                                         connectToken: '{connect_token}',
                                         includeSandbox: true,
                                         {filtro_js} 
-                                        onSuccess: (itemData) => {{
-                                            alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nO seu Item ID é: " + itemData.item.id + "\\n\\nPode fechar esta caixa e voltar ao painel.");
-                                        }},
-                                        onError: (error) => {{
-                                            alert("Erro na conexão: " + error.message);
-                                            document.getElementById('abrir-pluggy').style.display = 'block';
-                                        }}
+                                        onSuccess: (itemData) => {{ alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nID: " + itemData.item.id); }},
+                                        onError: (error) => {{ alert("Erro: " + error.message); document.getElementById('abrir-pluggy').style.display = 'block'; }}
                                     }});
                                     pluggyConnect.init();
                                 }};
@@ -419,7 +317,5 @@ with aba_openfinance:
                         </html>
                         """
                         components.html(html_code, height=700)
-                    else:
-                        st.error("A Pluggy reconheceu as chaves, mas falhou ao gerar o Connect Token.")
-                else:
-                    st.error("Falha na autenticação da Pluggy. Verifique as chaves no Cofre.")
+                    else: st.error("Falha ao gerar o Connect Token.")
+                else: st.error("Falha na autenticação.")
