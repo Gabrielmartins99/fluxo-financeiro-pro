@@ -53,16 +53,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO E VARIÁVEIS DE SESSÃO DINÂMICAS
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
+if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
 cookie_manager = stx.CookieManager(key="meu_gerenciador_cookies")
 
 if st.session_state.user_email is None:
     cookie_email = cookie_manager.get(cookie="user_email")
-    if cookie_email: st.session_state.user_email = cookie_email
+    cookie_nome = cookie_manager.get(cookie="user_nome")
+    if cookie_email: 
+        st.session_state.user_email = cookie_email
+        st.session_state.user_nome = cookie_nome if cookie_nome else "Usuário"
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -77,17 +81,34 @@ if not st.session_state.user_email:
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
                         st.session_state.user_email = res.user.email
+                        # Puxa o nome salvo nos metadados do banco de dados
+                        nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
+                        st.session_state.user_nome = nome_salvo
+                        
                         cookie_manager.set("user_email", res.user.email, max_age=30*24*60*60)
+                        cookie_manager.set("user_nome", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
                     except: st.error("E-mail ou senha incorretos.")
+            
             with aba_registro:
+                st.markdown("#### Cadastro de Novo Membro")
+                nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
+                
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
-                    try:
-                        supabase.auth.sign_up({"email": email_reg, "password": senha_reg})
-                        st.success("✅ Conta criada com sucesso! Faça login ao lado.")
-                    except: st.error("Erro ao criar conta.")
+                    if nome_reg.strip() != "" and email_reg.strip() != "":
+                        try:
+                            # Envia o nome de forma estruturada nos metadados nativos do Supabase
+                            supabase.auth.sign_up({
+                                "email": email_reg, 
+                                "password": senha_reg,
+                                "options": {"data": {"primeiro_nome": nome_reg.strip()}}
+                            })
+                            st.success(f"✅ Conta de {nome_reg} criada com sucesso! Faça login na aba ao lado.")
+                        except: st.error("Erro ao criar conta. Verifique os dados.")
+                    else:
+                        st.warning("Por favor, preencha o seu nome para podermos personalizar o seu painel.")
     st.stop()
 
 # ========================================================
@@ -114,6 +135,8 @@ def obter_opcoes(coluna, lista_base):
         return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
 
+# Ajuste automático na lista de responsáveis iniciais baseado em quem está logado!
+LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Dinheiro/Pix"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
@@ -145,15 +168,17 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER
+# 5. HEADER (DINÂMICO COM O NOME DO USUÁRIO)
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
-    st.write(f"👤 {st.session_state.user_email.split('@')[0]}")
+    st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
         cookie_manager.delete("user_email")
+        cookie_manager.delete("user_nome")
         st.session_state.user_email = None
+        st.session_state.user_nome = "Usuário"
         st.rerun()
 
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
@@ -178,7 +203,7 @@ with aba_dashboard:
             c1, c2, c3, c4 = st.columns(4)
             c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Conta (Sobra)</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
             c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
-            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Despesas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
             c4.markdown(f'<div class="executive-box" style="border-top: 4px solid #8B5CF6;"><div class="term-label">Investido (💼)</div><div class="term-amount" style="color:#8B5CF6;">R$ {t_inv:,.2f}</div></div>', unsafe_allow_html=True)
             
             if t_desp > 0:
@@ -257,13 +282,19 @@ with aba_lancamentos:
 
         with st.container(border=True):
             st.markdown("#### 3. Detalhes Adicionais")
-            c7, c8, c9 = st.columns(3)
+            c7, c8, c9, c10 = st.columns(4)
             with c7:
-                opcoes_resp = obter_opcoes("Responsavel", ["Gabriel", "Tainá", "Família", "Empresa"]) + ["➕ Novo Responsável..."]
+                opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
                 resp_sel = st.selectbox("Responsável (Quem paga/pagou)", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
             with c8: descricao = st.text_input("Descrição Resumida")
-            with c9: mes_fatura = st.date_input("Mês da Competência")
+            
+            with c9: ano_comp = st.selectbox("Ano Competência", [2026, 2027, 2028])
+            with c10:
+                meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
+                mes_sel = st.selectbox("Mês Competência (Fatura)", meses_nomes, index=datetime.now().month - 1)
+                mes_num = mes_sel.split(" - ")[0]
+                competencia_final = f"{ano_comp}-{mes_num}"
                 
             st.markdown("---")
             modo_lancamento = st.radio("Frequência de Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
@@ -276,10 +307,16 @@ with aba_lancamentos:
             if valor_total > 0 and categoria and conta_cartao and responsavel:
                 novas_linhas = []
                 valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
+                
+                start_year = ano_comp
+                start_month = int(mes_num)
+                
                 for i in range(parcelas):
-                    m = mes_fatura.month - 1 + i
-                    comp = f"{mes_fatura.year + (m // 12)}-{(m % 12) + 1:02d}"
+                    m = start_month - 1 + i
+                    y = start_year + (m // 12)
+                    comp = f"{y}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
+                    
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
@@ -355,43 +392,46 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (O PROMPT SEGURO CONTRA CORTES)
+# 8. ASSISTENTE IA (TECNOLOGIA PRÓPRIA, AUTORAL E 100% DINÂMICA)
 # ========================================================
 with aba_assistente:
-    st.markdown("### 🤖 Cérebro Digital Financeiro")
-    st.write("Consulte históricos, faturas, iFood, períodos de datas ou peça conselhos!")
+    st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
+    
+    # Mensagem de introdução usa dinamicamente o nome de quem está logado
+    boas_vindas = f"Olá, {st.session_state.user_nome}! Eu sou o motor de Inteligência Artificial nativo do seu sistema. Pode me perguntar sobre qualquer período de datas, faturas ou pedir análises dos seus gastos reais."
     
     if modelo_ia:
         if "mensagens_chat" not in st.session_state: 
-            st.session_state.mensagens_chat = [{"role": "assistant", "content": "Olá, Gabriel! Pergunte sobre seu histórico estilo Pierre."}]
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": boas_vindas}]
         
         for msg in st.session_state.mensagens_chat:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
         
-        prompt = st.chat_input("Pergunte ao seu assistente de finanças...")
+        prompt = st.chat_input("Consulte sua base de dados inteligente...")
         if prompt:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             
             with st.chat_message("assistant"):
-                with st.spinner("Analisando registros..."):
+                with st.spinner("Processando dados internos do sistema..."):
                     try:
-                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Sem dados."
+                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Nenhum dado."
                         
-                        # Injeção curta e direta: elimina risco de aspas soltas cortadas
-                        prompt_final = "Aja como o bot Pierre. Filtre as datas (ex: dia 1 ao 5) ou nomes (ex: iFood) se solicitado e faça somas. Se pedir para cadastrar, envie JSON estruturado no fim.\n" + "DADOS:\n" + hist_txt + "\nPERGUNTA: " + prompt
+                        # O prompt mestre foi rebatizado, limpo e agora recebe dinamicamente o nome correto!
+                        prompt_final = f"Você é o Cérebro Digital integrado do usuário. Nome do usuario atual logado: {st.session_state.user_nome}. Responda de forma direta e inteligente, sem citar tecnologias externas. Base de dados: \n{hist_txt}\n Pergunta: {prompt}"
                         
                         resposta = modelo_ia.generate_content(prompt_final)
-                        texto_resposta = response_text = resposta.text
+                        response_text = resposta.text
                         
                         st.markdown(response_text.split("```json")[0].strip())
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": response_text.split("```json")[0].strip()})
                         
                         if "```json" in response_text:
-                            dados_ia = json.loads(response_text.split("```json")[1].split("```")[0].strip())
+                            dados_ia = json.loads(response_text.split("
+```json")[1].split("```")[0].strip())
                             if dados_ia.get("acao") == "registrar":
-                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": "Gabriel", "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
-                                st.toast("✅ Sincronizado via IA!")
+                                supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "tipo": dados_ia.get("tipo", "Despesa"), "categoria": dados_ia.get("categoria", "Outros"), "conta_cartao": dados_ia.get("conta", "IA"), "valor": float(dados_ia.get("valor", 0.0)), "descricao": dados_ia.get("descricao", "Assistente"), "parcela": "À vista", "responsavel": st.session_state.user_nome, "origem_destino": dados_ia.get("descricao", ""), "status": "Pago"}).execute()
+                                st.toast("✅ Sincronizado com sucesso via IA!")
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
