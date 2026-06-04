@@ -136,6 +136,14 @@ def obter_connect_token(api_key):
     except: pass
     return None
 
+def listar_bancos_pluggy(api_key):
+    url = "https://api.pluggy.ai/connectors?countries=BR&types=PERSONAL_BANK&sandbox=true"
+    try:
+        res = requests.get(url, headers={"accept": "application/json", "X-API-KEY": api_key})
+        if res.status_code == 200: return res.json().get("results", [])
+    except: pass
+    return []
+
 # ========================================================
 # 5. HEADER
 # ========================================================
@@ -265,11 +273,11 @@ with aba_assistente:
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 9. OPEN FINANCE (O ROBÔ VIGIA)
+# 9. OPEN FINANCE (ROBÔ VIGIA + BLINDAGEM)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
-    st.info("**Ambiente Sandbox (Grátis):** A janela do 'Pluggy Bank' abrirá automaticamente.")
+    st.info("**Ambiente Sandbox (Grátis):** Selecione o 'Pluggy Bank' na janela para simular.")
     
     if not PLUGGY_CLIENT_ID:
         st.warning("⚠️ Credenciais da Pluggy ausentes no cofre.")
@@ -288,13 +296,16 @@ with aba_openfinance:
                     st.error("Falha na autenticação.")
 
         if st.session_state.get("pluggy_passe_seguro"):
-            st.success("✅ Passe gerado! Aguarde um instante...")
+            # O texto novo que prova que estamos rodando a versão certa!
+            st.success("✅ Passe gerado! Aguarde um instante enquanto blindamos a conexão...")
             
             html_code = f"""
             <!DOCTYPE html>
             <html lang="pt-BR">
             <head>
-                <script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)"></script>
+                <script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)" 
+                        onerror="document.getElementById('status').innerHTML = '<h3 style=\\'color: #DC2626;\\'>❌ O Navegador bloqueou o Banco!</h3><p>Parece que você está usando um AdBlock (como o uBlock Origin ou Brave Shields). Por favor, <b>desative o bloqueador nesta página</b> e clique em reiniciar.</p>'">
+                </script>
             </head>
             <body style="margin:0; text-align:center; padding-top:40px; font-family:sans-serif;">
                 <div id="status">
@@ -321,7 +332,7 @@ with aba_openfinance:
                         }}
                     }}
 
-                    // O Robô Vigia: Tenta iniciar até o código da Pluggy terminar de baixar
+                    // O Robô Vigia: Tenta iniciar APENAS quando o script oficial estiver 100% pronto!
                     function checarCarregamento() {{
                         if (typeof PluggyConnect !== 'undefined') {{
                             iniciarPluggy();
