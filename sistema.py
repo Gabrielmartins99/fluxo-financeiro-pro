@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM PROTEÇÃO DE LOGOUT REESCRITA
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -60,7 +60,6 @@ if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
 cookie_manager = stx.CookieManager(key="gerenciador_cookies_unico")
 
-# Carrega os cookies guardados de forma segura
 cookies = cookie_manager.get_all()
 if st.session_state.user_email is None and cookies:
     if "user_mail_saved" in cookies:
@@ -157,18 +156,17 @@ def gerar_pdf(df_mes, mes_selecionado):
     for index, row in df_lista.iterrows():
         desc = str(row['Descricao'])[:30] 
         linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Categoria'][:15]} | {desc} | R$ {row['Valor']:.2f}"
-        pdf.cell(190, 6, inline_texto := linha_texto, 0, 1, 'L')
+        pdf.cell(190, 6, linha_texto, 0, 1, 'L')
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER (LOGOUT ANTI-TRAVAMENTO)
+# 5. HEADER
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        # Corrigido de forma absoluta: Remove apenas uma chave mestre para deslogar instantaneamente sem travar a tela
         cookie_manager.delete("user_mail_saved")
         st.session_state.user_email = None
         st.session_state.user_nome = "Usuário"
@@ -233,7 +231,8 @@ with aba_dashboard:
                 if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
-                        gasto_atual = df_mes_metas[df_mes_metas["Categoria} == cat"]["Valor"].sum()
+                        # RESOLVIDO: Sintaxe corrigida e fechada com sucesso!
+                        gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
                         percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
                         st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
                         st.progress(percentual)
@@ -370,7 +369,7 @@ with aba_lancamentos:
                     if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
                         try:
                             supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("✅ Updated!")
+                            st.success("✅ Atualizado!")
                             time.sleep(1)
                             st.rerun()
                         except: st.error("Erro.")
@@ -383,7 +382,7 @@ with aba_lancamentos:
                         except: st.error("Erro.")
 
 # ========================================================
-# 8. ASSISTENTE IA (BLINDAGEM TOTAL E INSTANTÂNEA)
+# 8. ASSISTENTE IA 
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
@@ -400,7 +399,7 @@ with aba_assistente:
             st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Analisando registros..."):
+                with st.spinner("Processando dados internos..."):
                     try:
                         hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
                         prompt_final = f"Atue como o motor financeiro de {st.session_state.user_nome}. Faça somas matemáticas se pedido datas (dia 1 ao 5) ou nomes (iFood).\n\nDADOS:\n{hist_txt}\nPERGUNTA: {prompt}"
