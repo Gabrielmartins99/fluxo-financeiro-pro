@@ -58,20 +58,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES
+# 3. SISTEMA DE AUTENTICAÇÃO COM COOKIES (CORRIGIDO)
 # ========================================================
-# Erro corrigido aqui: removido o experimental_allow_widgets que o Streamlit não aceita mais
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+# 1. Garante que a variável do usuário existe primeiro (evita o AttributeError)
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 
-cookie_manager = get_cookie_manager()
+# 2. Inicia o Cookie Manager de forma limpa (sem o cache que causava o alerta amarelo)
+cookie_manager = stx.CookieManager()
 
-if "user_email" not in st.session_state or st.session_state.user_email is None:
+# 3. Se não tem ninguém logado na sessão, tenta puxar da memória do navegador
+if st.session_state.user_email is None:
     cookie_email = cookie_manager.get(cookie="user_email")
     if cookie_email:
         st.session_state.user_email = cookie_email
 
+# 4. Tela de Login caso realmente não tenha usuário
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
     
@@ -87,6 +89,7 @@ if not st.session_state.user_email:
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
                         st.session_state.user_email = res.user.email
+                        # Salva o cookie por 30 dias
                         cookie_manager.set("user_email", res.user.email, max_age=30*24*60*60)
                         st.rerun()
                     except Exception as e:
