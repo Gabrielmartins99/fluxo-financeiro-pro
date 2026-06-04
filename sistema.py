@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import uuid
 import time
-import os
 from supabase import create_client, Client
 
 # ========================================================
@@ -13,7 +11,7 @@ from supabase import create_client, Client
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
-# Inicializa a conexão com a nuvem
+# Inicializa a conexão com a nuvem (usando cache para não reconectar toda a hora)
 @st.cache_resource
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -41,7 +39,6 @@ st.markdown("""
             background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 10px;
         }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 26px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
-        .auth-box { background-color: #FFFFFF; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); max-width: 450px; margin: 0 auto; border: 1px solid rgba(79, 70, 229, 0.1); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -81,10 +78,10 @@ if not st.session_state.user_email:
                     except Exception as e:
                         st.error("Erro ao criar conta. Verifique os dados inseridos.")
     
-    st.stop()
+    st.stop() # Bloqueia o carregamento do restante do app se não estiver logado
 
 # ========================================================
-# 4. FUNÇÕES DE BANCO DE DADOS E LISTAS
+# 4. FUNÇÕES DE BANCO DE DADOS E LISTAS BASE
 # ========================================================
 def carregar_dados():
     try:
@@ -111,11 +108,11 @@ def obter_opcoes(coluna, lista_base):
         return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
 
-LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Santander", "Banco do Brasil", "C6 Bank", "Caixa Econômica", "Sicoob", "Sicredi", "BTG Pactual", "Dinheiro/Pix", "Nubank (Final 1234)", "Mastercard (Final 5678)"]
-LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Impostos", "Investimentos", "Outros"]
+LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Pix/Dinheiro"]
+LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 # ========================================================
-# 5. HEADER DO USUÁRIO LOGADO
+# 5. HEADER DO USUÁRIO LOGADO E NAVEGAÇÃO
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -128,7 +125,9 @@ with c_head2:
 
 aba_dashboard, aba_lancamentos, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🔌 Open Finance"])
 
-# --- DASHBOARD ---
+# ========================================================
+# 6. ABA DASHBOARD
+# ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         col_filtro1, col_filtro2 = st.columns(2)
@@ -154,10 +153,13 @@ with aba_dashboard:
     else:
         st.info("O Dashboard está aguardando lançamentos.")
 
-# --- LANÇAMENTOS (MANUAL E IMPORTAÇÃO) ---
+# ========================================================
+# 7. ABA LANÇAMENTOS
+# ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
     
+    # --- LANÇAMENTO MANUAL AVANÇADO ---
     with aba_manual:
         st.subheader("Registrar Movimentação Avançada")
         col1, col2, col3 = st.columns(3)
@@ -228,35 +230,87 @@ with aba_lancamentos:
             except Exception as e:
                 st.error(f"Erro ao salvar na nuvem: {e}")
 
+    # --- IMPORTAÇÃO INTELIGENTE DE FATURAS ---
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
         
-        # --- CAIXA DE INSTRUÇÃO PARA O USUÁRIO ---
-        st.info("**💡 Dica de Ouro:** Não use PDFs! Para uma leitura perfeita, vá no aplicativo do seu banco, acesse a sua fatura e procure pela opção **'Exportar'**. Escolha o formato **CSV** ou **Excel**. Todos os grandes bancos (Nubank, Inter, Itaú, etc.) possuem esta opção!")
-        
-        st.write("Faça o upload do arquivo gerado pelo banco. Você poderá **editar e categorizar** os dados antes de salvar definitivamente no sistema.")
+        st.info("**💡 Dica de Ouro:** Não use PDFs! Vá no aplicativo do seu banco, acesse a fatura e procure pela opção **'Exportar'**. Escolha o formato **CSV** ou **Excel**.")
         
         banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
         arquivo = st.file_uploader("Anexe o arquivo da fatura aqui", type=["csv", "xlsx", "xls"])
         
         if arquivo is not None:
             try:
+                # 1. Lê o arquivo de forma inteligente
                 if arquivo.name.endswith('.csv'):
                     df_fatura = pd.read_csv(arquivo, sep=None, engine='python') 
                 else:
                     df_fatura = pd.read_excel(arquivo)
                 
-                st.success(f"Arquivo '{arquivo.name}' lido com sucesso! Edite os dados na tabela abaixo se necessário:")
+                # 2. Prepara colunas interativas para o usuário categorizar
+                if "Categoria_Sistema" not in df_fatura.columns:
+                    df_fatura["Categoria_Sistema"] = "Outros"
+                if "Tipo_Sistema" not in df_fatura.columns:
+                    df_fatura["Tipo_Sistema"] = "Despesa"
+                    
+                st.success("✅ Arquivo lido com sucesso! Siga as instruções abaixo para mapear os dados.")
                 
+                # 3. Mapeador Visual de Colunas
+                st.write("### 📍 Passo 1: Onde estão as informações principais?")
+                c1, c2, c3 = st.columns(3)
+                col_data = c1.selectbox("Qual coluna contém a Data?", df_fatura.columns)
+                col_desc = c2.selectbox("Qual coluna contém a Descrição?", df_fatura.columns)
+                col_valor = c3.selectbox("Qual coluna contém o Valor?", df_fatura.columns)
+                
+                st.write("### ✍️ Passo 2: Categorize seus gastos")
+                st.write("Dê dois cliques nas colunas **Categoria_Sistema** e **Tipo_Sistema** na tabela abaixo para ajustar os gastos antes de salvar.")
+                
+                # Tabela interativa tipo "Mini-Excel"
                 df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
                 
+                # 4. Processamento e Salvamento
                 if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
-                    st.warning("A função de gravar esses dados editados no Supabase será ativada no nosso próximo passo de programação!")
+                    novas_linhas = []
+                    mes_atual = datetime.now().strftime("%Y-%m")
+                    
+                    for index, row in df_editado.iterrows():
+                        try:
+                            # Limpa os dados de valor caso venham com R$ ou formatos estranhos
+                            val_str = str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip()
+                            val = float(val_str)
+                            if val == 0: continue # Ignora linhas vazias/zeradas
+                        except:
+                            val = 0.0
+                            
+                        novas_linhas.append({
+                            "user_email": st.session_state.user_email,
+                            "data_compra": str(row[col_data])[:10],
+                            "competencia": mes_atual,
+                            "tipo": row.get("Tipo_Sistema", "Despesa"),
+                            "categoria": row.get("Categoria_Sistema", "Outros"),
+                            "subcategoria": "Importado",
+                            "conta_cartao": banco_selecionado,
+                            "valor": abs(val),
+                            "descricao": str(row[col_desc]),
+                            "parcela": "Fatura",
+                            "responsavel": "Eu",
+                            "status": "Pago"
+                        })
+                        
+                    if novas_linhas:
+                        supabase.table("lancamentos").insert(novas_linhas).execute()
+                        st.success(f"✅ Fenomenal! {len(novas_linhas)} lançamentos importados com sucesso para a nuvem!")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.warning("Nenhum dado válido encontrado. Certifique-se de ter mapeado as colunas corretamente.")
                     
             except Exception as e:
-                st.error("Não foi possível ler o arquivo. Certifique-se de que é uma fatura exportada diretamente do banco (CSV/Excel) válida.")
+                st.error(f"Erro ao processar arquivo. Verifique se o formato está correto. Erro técnico: {e}")
 
-# --- OPEN FINANCE ---
+# ========================================================
+# 8. ABA OPEN FINANCE
+# ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Aberta")
     st.info("A infraestrutura do banco de dados na nuvem (Supabase) foi configurada com sucesso. A conexão via Hub Integrador será iniciada na próxima etapa.")
