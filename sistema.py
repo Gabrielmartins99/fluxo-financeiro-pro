@@ -265,7 +265,7 @@ with aba_assistente:
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 9. OPEN FINANCE (MEMÓRIA ATIVADA)
+# 9. OPEN FINANCE (PILOTO AUTOMÁTICO)
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
@@ -274,7 +274,7 @@ with aba_openfinance:
     if not PLUGGY_CLIENT_ID:
         st.warning("⚠️ Credenciais da Pluggy ausentes no cofre.")
     else:
-        # 1. O botão apenas busca o passe e salva no cérebro do app
+        # Botão principal
         if st.button("🚀 Iniciar Conexão Bancária Segura", type="primary"):
             with st.spinner("Gerando passe temporário..."):
                 chave_api = obter_token_pluggy()
@@ -282,49 +282,56 @@ with aba_openfinance:
                     token = obter_connect_token(chave_api)
                     if token:
                         st.session_state.pluggy_passe_seguro = token
-                        st.rerun()  # Atualiza a tela para exibir o botão novo!
+                        st.rerun() 
                     else:
                         st.error("Falha ao gerar o Connect Token.")
                 else:
                     st.error("Falha na autenticação.")
 
-        # 2. Se o passe já está salvo no cérebro, a janela SEMPRE vai aparecer!
+        # Quando o passe é gerado, o Javascript roda sozinho!
         if st.session_state.get("pluggy_passe_seguro"):
-            st.success("✅ Passe gerado! O Widget de conexão carregou logo abaixo.")
+            st.success("✅ Passe gerado! O Widget de conexão vai abrir automaticamente.")
             
             html_code = f"""
             <!DOCTYPE html>
             <html lang="pt-BR">
-            <head><script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)"></script></head>
-            <body style="margin:0; display:flex; justify-content:center; padding-top:20px; font-family:sans-serif;">
-                
-                <button id="abrir-pluggy" style="background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer;">
-                    🏦 Abrir Janela do Banco
-                </button>
+            <head>
+                <script src="[https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js](https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js)"></script>
+            </head>
+            <body style="margin:0; text-align:center; padding-top:40px; font-family:sans-serif;">
+                <div id="status">
+                    <h3 style="color: #4F46E5;">⏳ Carregando a janela do banco...</h3>
+                    <p>Se ela não abrir automaticamente em 3 segundos, verifique o bloqueador de pop-ups do seu navegador.</p>
+                </div>
                 
                 <script>
-                    document.getElementById('abrir-pluggy').onclick = function() {{
-                        this.style.display = 'none';
-                        const pluggyConnect = new PluggyConnect({{
-                            connectToken: '{st.session_state.pluggy_passe_seguro}',
-                            includeSandbox: true,
-                            onSuccess: (itemData) => {{ 
-                                alert("🎉 MÁGICA CONCLUÍDA! O banco foi conectado no modo Sandbox!\\n\\nID: " + itemData.item.id); 
-                            }},
-                            onError: (error) => {{ 
-                                alert("Erro: " + error.message); 
-                                document.getElementById('abrir-pluggy').style.display = 'block'; 
-                            }}
-                        }});
-                        pluggyConnect.init();
-                    }};
+                    function iniciarPluggy() {{
+                        try {{
+                            const pluggyConnect = new PluggyConnect({{
+                                connectToken: '{st.session_state.pluggy_passe_seguro}',
+                                includeSandbox: true,
+                                onSuccess: (itemData) => {{ 
+                                    document.getElementById('status').innerHTML = "<h3 style='color: #16A34A;'>🎉 Banco Conectado com Sucesso!</h3><p>O seu Item ID é: <b>" + itemData.item.id + "</b></p>";
+                                    alert("MÁGICA CONCLUÍDA! Banco conectado!\\n\\nID: " + itemData.item.id); 
+                                }},
+                                onError: (error) => {{ 
+                                    document.getElementById('status').innerHTML = "<h3 style='color: #DC2626;'>❌ Erro</h3><p>" + error.message + "</p>";
+                                }}
+                            }});
+                            pluggyConnect.init();
+                        }} catch (e) {{
+                            document.getElementById('status').innerHTML = "<h3 style='color: #DC2626;'>❌ Falha no Script</h3><p>Erro: " + e.message + "</p>";
+                        }}
+                    }}
+
+                    // Dispara a janela do banco automaticamente 1 segundo após a tela carregar
+                    setTimeout(iniciarPluggy, 1000);
                 </script>
             </body>
             </html>
             """
-            components.html(html_code, height=700)
+            components.html(html_code, height=600)
             
-            # Um botão extra caso você queira fechar a conexão e gerar uma nova
-            if st.button("🔴 Fechar Conexão e Reiniciar"):
+            if st.button("🔴 Cancelar / Reiniciar Processo"):
                 st.session_state.pluggy_passe_seguro = None
                 st.rerun()
