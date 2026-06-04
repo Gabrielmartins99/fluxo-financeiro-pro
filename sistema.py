@@ -78,7 +78,7 @@ if not st.session_state.user_email:
                     except Exception as e:
                         st.error("Erro ao criar conta. Verifique os dados inseridos.")
     
-    st.stop() # Bloqueia o carregamento do restante do app se não estiver logado
+    st.stop()
 
 # ========================================================
 # 4. FUNÇÕES DE BANCO DE DADOS E LISTAS BASE
@@ -126,32 +126,69 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🔌 Open Finance"])
 
 # ========================================================
-# 6. ABA DASHBOARD
+# 6. ABA DASHBOARD (NOVO KILLER DASHBOARD)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        col_filtro1, col_filtro2 = st.columns(2)
-        with col_filtro1:
-            meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-            mes_selecionado = st.selectbox("📅 Mês de Cobrança / Fatura", ["Ver Tudo"] + meses_disponiveis)
+        dash_mensal, dash_anual = st.tabs(["📅 Visão Mensal", "📈 Visão Anual (Evolução)"])
         
-        df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
+        # --- SUB-ABA: VISÃO MENSAL ---
+        with dash_mensal:
+            col_filtro1, col_filtro2 = st.columns(2)
+            with col_filtro1:
+                meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
+                mes_selecionado = st.selectbox("Selecione o Mês / Fatura", ["Ver Tudo"] + meses_disponiveis)
+            
+            df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
+            
+            t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
+            t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
+            saldo = t_rec - t_desp
+            
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {saldo:,.2f}</div></div>', unsafe_allow_html=True)
+            c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            
+            if t_desp > 0:
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_graf1, col_graf2 = st.columns(2)
+                
+                with col_graf1:
+                    fig1 = px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição por Categoria", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+                    st.plotly_chart(fig1, use_container_width=True)
+                
+                with col_graf2:
+                    df_top = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
+                    fig2 = px.bar(df_top, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Despesas", text_auto='.2s', color="Valor", color_continuous_scale="Reds")
+                    fig2.update_layout(yaxis={'categoryorder':'total ascending'})
+                    st.plotly_chart(fig2, use_container_width=True)
         
-        t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
-        t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
-        saldo = t_rec - t_desp
-        
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Líquido</div><div class="term-amount" style="color:#0284C7;">R$ {saldo:,.2f}</div></div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
-        c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
-        
-        if t_desp > 0:
-            st.markdown("<br>", unsafe_allow_html=True)
-            fig1 = px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Despesas por Categoria", hole=0.4)
-            st.plotly_chart(fig1, use_container_width=True)
+        # --- SUB-ABA: VISÃO ANUAL ---
+        with dash_anual:
+            st.markdown("### 📈 Evolução do Patrimônio e Análise Profunda")
+            
+            df_evolucao = df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index()
+            fig_evo = px.bar(df_evolucao, x="Competencia", y="Valor", color="Tipo", barmode="group", 
+                             title="Receitas vs Despesas ao Longo do Tempo", 
+                             color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626"})
+            st.plotly_chart(fig_evo, use_container_width=True)
+            
+            st.markdown("---")
+            col_anual1, col_anual2 = st.columns(2)
+            
+            with col_anual1:
+                df_banco = df[df["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
+                fig_banco = px.pie(df_banco, values="Valor", names="Conta_Cartao", title="Despesas por Conta/Cartão", hole=0.3, color_discrete_sequence=px.colors.sequential.Blues_r)
+                st.plotly_chart(fig_banco, use_container_width=True)
+                
+            with col_anual2:
+                df_resp = df[df["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
+                fig_resp = px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável (Família/Sócios)", hole=0.3, color_discrete_sequence=px.colors.qualitative.Set2)
+                st.plotly_chart(fig_resp, use_container_width=True)
+
     else:
-        st.info("O Dashboard está aguardando lançamentos.")
+        st.info("O Dashboard está aguardando lançamentos. Registre ou importe suas movimentações para ver a mágica acontecer!")
 
 # ========================================================
 # 7. ABA LANÇAMENTOS
@@ -159,7 +196,6 @@ with aba_dashboard:
 with aba_lancamentos:
     aba_manual, aba_importar = st.tabs(["✍️ Lançamento Manual", "📥 Importar Fatura de Cartão"])
     
-    # --- LANÇAMENTO MANUAL AVANÇADO ---
     with aba_manual:
         st.subheader("Registrar Movimentação Avançada")
         col1, col2, col3 = st.columns(3)
@@ -230,10 +266,8 @@ with aba_lancamentos:
             except Exception as e:
                 st.error(f"Erro ao salvar na nuvem: {e}")
 
-    # --- IMPORTAÇÃO INTELIGENTE DE FATURAS ---
     with aba_importar:
         st.subheader("Integração Inteligente de Faturas")
-        
         st.info("**💡 Dica de Ouro:** Não use PDFs! Vá no aplicativo do seu banco, acesse a fatura e procure pela opção **'Exportar'**. Escolha o formato **CSV** ou **Excel**.")
         
         banco_selecionado = st.selectbox("Selecione o banco de origem da fatura", ["Nubank", "Inter", "Itaú", "Outro"])
@@ -241,13 +275,11 @@ with aba_lancamentos:
         
         if arquivo is not None:
             try:
-                # 1. Lê o arquivo de forma inteligente
                 if arquivo.name.endswith('.csv'):
                     df_fatura = pd.read_csv(arquivo, sep=None, engine='python') 
                 else:
                     df_fatura = pd.read_excel(arquivo)
                 
-                # 2. Prepara colunas interativas para o usuário categorizar
                 if "Categoria_Sistema" not in df_fatura.columns:
                     df_fatura["Categoria_Sistema"] = "Outros"
                 if "Tipo_Sistema" not in df_fatura.columns:
@@ -255,7 +287,6 @@ with aba_lancamentos:
                     
                 st.success("✅ Arquivo lido com sucesso! Siga as instruções abaixo para mapear os dados.")
                 
-                # 3. Mapeador Visual de Colunas
                 st.write("### 📍 Passo 1: Onde estão as informações principais?")
                 c1, c2, c3 = st.columns(3)
                 col_data = c1.selectbox("Qual coluna contém a Data?", df_fatura.columns)
@@ -265,20 +296,17 @@ with aba_lancamentos:
                 st.write("### ✍️ Passo 2: Categorize seus gastos")
                 st.write("Dê dois cliques nas colunas **Categoria_Sistema** e **Tipo_Sistema** na tabela abaixo para ajustar os gastos antes de salvar.")
                 
-                # Tabela interativa tipo "Mini-Excel"
                 df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
                 
-                # 4. Processamento e Salvamento
                 if st.button("🚀 Confirmar e Salvar Lançamentos", type="primary"):
                     novas_linhas = []
                     mes_atual = datetime.now().strftime("%Y-%m")
                     
                     for index, row in df_editado.iterrows():
                         try:
-                            # Limpa os dados de valor caso venham com R$ ou formatos estranhos
                             val_str = str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip()
                             val = float(val_str)
-                            if val == 0: continue # Ignora linhas vazias/zeradas
+                            if val == 0: continue
                         except:
                             val = 0.0
                             
