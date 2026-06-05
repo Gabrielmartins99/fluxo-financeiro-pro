@@ -106,7 +106,7 @@ if not st.session_state.user_email:
                                 "options": {"data": {"primeiro_nome": nome_reg.strip()}}
                             })
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
-                        except: st.error("Erro ao criar conta.")
+                        except: st.error("Erro ao criar conta no Supabase Auth.")
                     else: st.warning("Por favor, informe seu primeiro nome.")
     st.stop()
 
@@ -181,7 +181,7 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD (COM NOVOS GRÁFICOS DE RESPONSÁVEL E ORIGEM)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
@@ -205,10 +205,30 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
+                
+                # LINHA 1: Categorias e Descrição
                 col_graf1, col_graf2 = st.columns(2)
-                with col_graf1: st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
-                with col_graf2: st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
-            
+                with col_graf1: 
+                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
+                with col_graf2: 
+                    st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # LINHA 2: NOVOS GRÁFICOS (Responsável e Destino)
+                col_graf3, col_graf4 = st.columns(2)
+                with col_graf3:
+                    df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
+                    st.plotly_chart(px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável (Quem Pagou)"), use_container_width=True)
+                with col_graf4:
+                    # Filtra para evitar vazios no gráfico de destino
+                    df_dest = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Origem_Destino"] != "")]
+                    if not df_dest.empty:
+                        df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
+                        st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores (Para onde foi o dinheiro)"), use_container_width=True)
+                    else:
+                        st.info("💡 Adicione o local de Origem/Destino nos seus lançamentos para gerar este ranking.")
+
             st.markdown("---")
             try:
                 pdf_bytes = gerar_pdf(df_dash, str(mes_selecionado))
@@ -247,7 +267,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (ESTILO EXCEL)
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -312,8 +332,6 @@ with aba_lancamentos:
                     y = start_year + (m // 12)
                     comp = f"{y}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
-                    
-                    # PROJEÇÃO INTELIGENTE DE DATAS: Avança o mês da data de ocorrência automaticamente
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
@@ -354,12 +372,11 @@ with aba_lancamentos:
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]].copy()
+            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino"]].copy()
             df_view.insert(0, "Apagar?", False)
             
-            st.write("🔒 **Instruções Dinâmicas:** Para ajustar o dia do salário, dê um duplo clique na célula **'Data'**, altere e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'** e confirme.")
+            st.write("🔒 **Instruções Dinâmicas:** Edite os dados diretamente na tabela abaixo e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'**.")
             
-            # Editor 100% interativo: Apenas o ID é intocável. O resto pode ser alterado livremente!
             df_resultado = st.data_editor(
                 df_view, 
                 hide_index=True, 
@@ -375,19 +392,20 @@ with aba_lancamentos:
                 if st.button("💾 Salvar Edições da Tabela", type="primary", use_container_width=True):
                     try:
                         mudancas_realizadas = 0
-                        # O sistema faz uma varredura para atualizar automaticamente tudo o que você editou
                         for idx in range(len(df_resultado)):
                             row_editada = df_resultado.iloc[idx]
                             row_original = df_view.iloc[idx]
                             
                             if not row_editada["Apagar?"]:
-                                if (row_editada["Data"] != row_original["Data"] or
-                                    row_editada["Valor"] != row_original["Valor"] or
-                                    row_editada["Competencia"] != row_original["Competencia"] or
-                                    row_editada["Descricao"] != row_original["Descricao"] or
-                                    row_editada["Categoria"] != row_original["Categoria"] or
-                                    row_editada["Conta_Cartao"] != row_original["Conta_Cartao"] or
-                                    row_editada["Tipo"] != row_original["Tipo"]):
+                                if (str(row_editada["Data"]) != str(row_original["Data"]) or
+                                    float(row_editada["Valor"]) != float(row_original["Valor"]) or
+                                    str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
+                                    str(row_editada["Descricao"]) != str(row_original["Descricao"]) or
+                                    str(row_editada["Categoria"]) != str(row_original["Categoria"]) or
+                                    str(row_editada["Conta_Cartao"]) != str(row_original["Conta_Cartao"]) or
+                                    str(row_editada["Responsavel"]) != str(row_original["Responsavel"]) or
+                                    str(row_editada["Origem_Destino"]) != str(row_original["Origem_Destino"]) or
+                                    str(row_editada["Tipo"]) != str(row_original["Tipo"])):
                                     
                                     supabase.table("lancamentos").update({
                                         "data_compra": str(row_editada["Data"]),
@@ -396,7 +414,9 @@ with aba_lancamentos:
                                         "categoria": str(row_editada["Categoria"]),
                                         "conta_cartao": str(row_editada["Conta_Cartao"]),
                                         "descricao": str(row_editada["Descricao"]),
-                                        "valor": float(row_editada["Valor"])
+                                        "valor": float(row_editada["Valor"]),
+                                        "responsavel": str(row_editada["Responsavel"]),
+                                        "origem_destino": str(row_editada["Origem_Destino"])
                                     }).eq("id", str(row_editada["ID"])).execute()
                                     mudancas_realizadas += 1
                         
@@ -405,7 +425,7 @@ with aba_lancamentos:
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.info("Nenhuma edição de valor ou texto foi detectada.")
+                            st.info("Nenhuma edição detectada.")
                     except Exception as e:
                         st.error(f"Erro ao salvar edições: {e}")
             
@@ -414,18 +434,18 @@ with aba_lancamentos:
                     if st.button(f"🗑️ Apagar {len(ids_para_apagar)} Selecionados", use_container_width=True):
                         try:
                             supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
-                            st.error("Lançamentos Removidos com Sucesso!")
+                            st.error("Lançamentos Removidos!")
                             time.sleep(1)
                             st.rerun()
                         except Exception as e: st.error(f"Erro ao excluir: {e}")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
             meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-            mes_reset = st.selectbox("Limpeza Rápida: Selecione um mês para esvaziar todos os dados associados a ele:", meses_disponiveis)
+            mes_reset = st.selectbox("Limpeza Rápida: Selecione um mês para esvaziar os dados:", meses_disponiveis)
             if st.button(f"🚨 Limpar Mês {mes_reset} Inteiro"):
                 try:
                     supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
-                    st.error("Mês totalmente limpo!")
+                    st.error("Mês limpo!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e: st.error(f"Erro ao limpar mês: {e}")
