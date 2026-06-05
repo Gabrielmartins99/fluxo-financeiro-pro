@@ -52,33 +52,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM VERIFICAÇÃO EM TEMPO REAL (NOVO)
+# 3. AUTENTICAÇÃO BLINDADA (ÚNICO COOKIE)
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
-cookie_manager = stx.CookieManager(key="gerenciador_cookies_seguro_v3")
+# Inicialização única do gerenciador para evitar conflitos de componentes
+cookie_manager = stx.CookieManager(key="cm_auth_v5")
 
-cookies = cookie_manager.get_all()
-
-# Lógica reconstrutora de segurança
-if st.session_state.user_email is None and cookies:
-    if "u_mail" in cookies and cookies["u_mail"]:
-        email_candidato = cookies["u_mail"]
-        nome_candidato = cookies.get("u_name", "Usuário")
-        
-        # CHECAGEM REAL: O usuário ainda existe no Supabase Auth?
+if st.session_state.user_email is None:
+    cookie_auth = cookie_manager.get(cookie="app_auth_data")
+    if cookie_auth:
         try:
-            # Forçamos uma mini busca fake usando a API pública para testar a sessão
-            teste_auth = supabase.auth.get_session()
-            # Se passou aqui, mantemos temporariamente
-            st.session_state.user_email = email_candidato
-            st.session_state.user_nome = nome_candidato
+            # O sistema desempacota o email e o nome salvos na mesma string separada por barra vertical (|)
+            dados = str(cookie_auth).split("|")
+            st.session_state.user_email = dados[0]
+            st.session_state.user_nome = dados[1] if len(dados) > 1 else "Usuário"
         except:
-            # Se o Supabase recusar ou o usuário foi deletado, limpa tudo na hora!
-            st.session_state.user_email = None
-            st.session_state.user_nome = "Usuário"
+            pass
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -96,10 +88,11 @@ if not st.session_state.user_email:
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
                         
-                        cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
-                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
+                        # Salva tudo em um único cookie seguro para evitar o erro DuplicateElementKey
+                        cookie_pacote = f"{res.user.email}|{nome_salvo}"
+                        cookie_manager.set("app_auth_data", cookie_pacote, max_age=30*24*60*60)
                         st.rerun()
-                    except: st.error("E-mail ou senha incorretos ou usuário inexistente no Supabase.")
+                    except: st.error("E-mail ou senha incorretos.")
             with aba_registro:
                 st.markdown("#### Cadastro de Novo Membro")
                 nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
@@ -114,7 +107,7 @@ if not st.session_state.user_email:
                                 "options": {"data": {"primeiro_nome": nome_reg.strip()}}
                             })
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
-                        except: st.error("Erro ao criar conta no Supabase Auth.")
+                        except: st.error("Erro ao criar conta no servidor.")
                     else: st.warning("Por favor, informe seu primeiro nome.")
     st.stop()
 
@@ -174,16 +167,15 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER (BOTÃO SAIR TOTALMENTE REESCRITO)
+# 5. HEADER COM LOGOUT IMEDIATO
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        # Forçamos o navegador a sobrescrever e matar os cookies antigos na hora!
-        cookie_manager.set("u_mail", "", max_age=-1)
-        cookie_manager.set("u_name", "", max_age=-1)
+        # Executa uma única ação de limpeza no cookie para evitar colisão visual
+        cookie_manager.delete("app_auth_data")
         st.session_state.clear()
         st.rerun()
 
@@ -256,7 +248,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS
+# 7. LANÇAMENTOS E ELIMINAÇÃO EM MASSA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -360,28 +352,31 @@ with aba_lancamentos:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]].copy()
-            df_view["Apagar?"] = False
-            cols = ["Apagar?"] + [c for c in df_view.columns if c != "Apagar?"]
-            df_view = df_view[cols]
+            df_view.insert(0, "Apagar?", False)
             
+            st.write("🔒 **Instruções:** Selecione as caixas na coluna **'Apagar?'** e clique no botão abaixo para eliminar em massa.")
             df_resultado = st.data_editor(df_view, hide_index=True, use_container_width=True, disabled=["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"])
             ids_para_apagar = df_resultado[df_resultado["Apagar?"] == True]["ID"].tolist()
             
             if ids_para_apagar:
                 if st.button(f"🗑️ Apagar {len(ids_para_apagar)} Selecionados", type="primary"):
-                    supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
-                    st.success("Removidos!")
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
+                        st.success("Lançamentos Removidos com Sucesso!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e: st.error(f"Erro ao excluir: {e}")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
             meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-            mes_reset = st.selectbox("Selecione um mês inteiro para limpar:", meses_disponiveis)
+            mes_reset = st.selectbox("Selecione um mês inteiro para limpar todos os dados de uma vez:", meses_disponiveis)
             if st.button(f"🚨 Limpar Mês {mes_reset} Inteiro"):
-                supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
-                st.error("Mês limpo!")
-                time.sleep(1)
-                st.rerun()
+                try:
+                    supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
+                    st.error("Mês totalmente limpo!")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e: st.error(f"Erro ao limpar mês: {e}")
 
 # ========================================================
 # 8. ASSISTENTE IA 
