@@ -182,13 +182,12 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD (CONTROLE TOTAL)
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
         with dash_mensal:
-            # FILTROS DE RAIO-X: Aqui está o "Controle Total"
             st.markdown("#### 🔍 Filtros do Painel (O seu Custo Real)")
             c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
             with c_filtro1:
@@ -200,7 +199,6 @@ with aba_dashboard:
                 opcoes_status_dash = ["Todos", "Pago", "Pendente"]
                 status_selecionado = st.selectbox("Status", opcoes_status_dash)
             
-            # Aplicando os filtros para recriar a realidade financeira
             df_dash = df.copy()
             if mes_selecionado != "Ver Tudo":
                 df_dash = df_dash[df_dash["Competencia"] == mes_selecionado]
@@ -279,7 +277,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM STATUS)
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -330,7 +328,6 @@ with aba_lancamentos:
             with c11:
                 modo_lancamento = st.radio("Frequência de Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
             with c12:
-                # O PODER DO STATUS: O usuário escolhe se a conta já foi paga ou se está pendente (ex: Compra pro Sérgio)
                 status_pagamento = st.selectbox("Status atual do Lançamento", ["Pago", "Pendente"])
                 
             if modo_lancamento == "Parcelado": parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
@@ -351,8 +348,6 @@ with aba_lancamentos:
                     comp = f"{y}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
-                    
-                    # Status inteligente: A primeira parcela respeita o que você marcou, as do futuro nascem como Pendentes.
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
@@ -393,12 +388,12 @@ with aba_lancamentos:
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            # Expondo a coluna Status para a tabela
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             df_view.insert(0, "Apagar?", False)
             
+            # ATUALIZAÇÃO: O bloco de filtros agora conta com 4 colunas em vez de 3
             st.markdown("#### 🔍 Filtros de Busca")
-            c_f1, c_f2, c_f3 = st.columns(3)
+            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
             with c_f1:
                 opcoes_tipo = ["Todos", "Despesa", "Receita", "Investimento"]
                 filtro_tipo = st.selectbox("Filtrar por Tipo", opcoes_tipo)
@@ -408,13 +403,20 @@ with aba_lancamentos:
             with c_f3:
                 opcoes_resp = ["Todos"] + sorted(df_view["Responsavel"].unique())
                 filtro_resp = st.selectbox("Filtrar por Responsável", opcoes_resp)
+            with c_f4:
+                # O novo filtro entra em ação aqui
+                opcoes_status = ["Todos", "Pago", "Pendente"]
+                filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
             
+            # Aplicando a lógica de triagem para limpar a tela
             if filtro_tipo != "Todos":
                 df_view = df_view[df_view["Tipo"] == filtro_tipo]
             if filtro_comp != "Todos":
                 df_view = df_view[df_view["Competencia"] == filtro_comp]
             if filtro_resp != "Todos":
                 df_view = df_view[df_view["Responsavel"] == filtro_resp]
+            if filtro_status != "Todos":
+                df_view = df_view[df_view["Status"] == filtro_status]
             
             st.write(f"🔒 **Instruções Dinâmicas:** Mostrando {len(df_view)} lançamentos. Edite a coluna **Status** para gerir pendências e clique em **'Salvar Edições'**.")
             
