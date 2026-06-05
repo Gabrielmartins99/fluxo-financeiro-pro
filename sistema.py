@@ -81,7 +81,6 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
-                        
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
@@ -160,14 +159,13 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER (LOGOUT TOTALMENTE PROTEGIDO)
+# 5. HEADER
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        # Solução Definitiva: Limpa o estado da sessão e reinicia o app sem tocar em cookies instáveis
         st.session_state.clear()
         st.write("<script>location.reload();</script>", unsafe_allow_html=True)
         st.rerun()
@@ -241,10 +239,10 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS
+# 7. LANÇAMENTOS 
 # ========================================================
 with aba_lancamentos:
-    aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar (Editar/Apagar)"])
+    aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
     
     with aba_manual:
         st.markdown("### 📝 Registrar Nova Movimentação")
@@ -339,46 +337,67 @@ with aba_lancamentos:
                     time.sleep(1)
                     st.rerun()
 
+    # ========================================================
+    # ATUALIZAÇÃO PREMIUM: ELIMINAÇÃO EM MASSA INTERATIVA
+    # ========================================================
     with aba_gerenciar:
-        st.subheader("Gerenciar Movimentações")
-        if df.empty: st.info("Nenhum lançamento encontrado.")
+        st.markdown("### ✏️ Painel de Controle e Limpeza de Lançamentos")
+        
+        if df.empty:
+            st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            st.dataframe(df[["Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].sort_values("Data", ascending=False), use_container_width=True, hide_index=True)
-            st.markdown("---")
-            opcoes_edit = {row["ID"]: f"{row['Data']} | {row['Descricao']} | R$ {row['Valor']:.2f}" for idx, row in df.iterrows()}
-            id_selecionado = st.selectbox("Selecione o Lançamento para Alterar:", options=list(opcoes_edit.keys()), format_func=lambda x: opcoes_edit[x])
-            if id_selecionado:
-                linha_edit = df[df["ID"] == id_selecionado].iloc[0]
-                with st.container(border=True):
-                    c_ed1, c_ed2, c_ed3 = st.columns(3)
-                    with c_ed1:
-                        novo_tipo = st.selectbox("Tipo", ["Despesa", "Receita", "Investimento"], index=["Despesa", "Receita", "Investimento"].index(linha_edit["Tipo"]) if linha_edit["Tipo"] in ["Despesa", "Receita", "Investimento"] else 0, key="ed_tipo")
-                        try: data_atual = pd.to_datetime(linha_edit["Data"])
-                        except: data_atual = datetime.now()
-                        nova_data = st.date_input("Data", data_atual, key="ed_data")
-                        novo_valor = st.number_input("Valor (R$)", value=float(linha_edit["Valor"]), min_value=0.0, key="ed_valor")
-                    with c_ed2:
-                        nova_cat = st.text_input("Categoria", value=str(linha_edit["Categoria"]), key="ed_cat")
-                        nova_conta = st.text_input("Conta / Cartão", value=str(linha_edit["Conta_Cartao"]), key="ed_conta")
-                        nova_desc = st.text_input("Descrição", value=str(linha_edit["Descricao"]), key="ed_desc")
-                    with c_ed3:
-                        novo_resp = st.text_input("Responsável", value=str(linha_edit["Responsavel"]), key="ed_resp")
-                        novo_origem = st.text_input("Origem/Destino", value=str(linha_edit.get("Origem_Destino", "")), key="ed_origem")
-                        nova_comp = st.text_input("Competência (YYYY-MM)", value=str(linha_edit["Competencia"]), key="ed_comp")
-                    if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("lancamentos").update({"tipo": novo_tipo, "data_compra": nova_data.strftime("%Y-%m-%d"), "valor": novo_valor, "categoria": nova_cat, "conta_cartao": nova_conta, "descricao": nova_desc, "responsavel": novo_resp, "origem_destino": novo_origem, "competencia": nova_comp}).eq("id", id_selecionado).execute()
-                            st.success("✅ Atualizado!")
-                            time.sleep(1)
-                            st.rerun()
-                        except: st.error("Erro.")
-                    if st.button("🗑️ Apagar Permanentemente", use_container_width=True):
-                        try:
-                            supabase.table("lancamentos").delete().eq("id", id_selecionado).execute()
-                            st.error("Apagado!")
-                            time.sleep(1)
-                            st.rerun()
-                        except: st.error("Erro.")
+            # Organiza os dados para exibição clara
+            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]].copy()
+            df_view["Apagar?"] = False  # Cria uma coluna de caixa de verificação dinâmica
+            
+            # Reposiciona a coluna "Apagar?" para a primeira posição (Padrão de Apps Premium)
+            cols = ["Apagar?"] + [c for c in df_view.columns if c != "Apagar?"]
+            df_view = df_view[cols]
+            
+            st.write("🔒 **Instruções:** Selecione as caixas na coluna **'Apagar?'** para as linhas que deseja remover e clique no botão abaixo.")
+            
+            # Editor de dados interativo com checkbox nativo
+            df_resultado = st.data_editor(
+                df_view,
+                hide_index=True,
+                use_container_width=True,
+                disabled=["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]
+            )
+            
+            # Captura quais IDs o usuário marcou como True
+            ids_para_apagar = df_resultado[df_resultado["Apagar?"] == True]["ID"].tolist()
+            
+            # AÇÃO 1: Eliminar os selecionados em massa
+            if ids_para_apagar:
+                st.warning(f"⚠️ Você selecionou {len(ids_para_apagar)} lançamento(s) para exclusão.")
+                if st.button(f"🗑️ Apagar Todos os {len(ids_para_apagar)} Selecionados", type="primary"):
+                    try:
+                        # Executa uma única chamada deletando a lista inteira de uma vez só!
+                        supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
+                        st.success("💥 Lançamentos selecionados foram eliminados com sucesso!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao excluir em massa: {e}")
+            
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown("### 🧽 Limpeza Completa por Mês (Reset de Mês)")
+            
+            c_reset1, c_reset2 = st.columns([2, 1])
+            with c_reset1:
+                meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
+                mes_reset = st.selectbox("Selecione um mês inteiro para apagar tudo de uma vez:", meses_disponiveis, key="sb_reset")
+            with c_reset2:
+                st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                if st.button(f"🚨 Limpar Mês {mes_reset} Inteiro", use_container_width=True):
+                    try:
+                        # Limpa o bloco inteiro filtrando pela competência e pelo e-mail seguro do usuário
+                        supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
+                        st.error(f"🧹 Todo o histórico de {mes_reset} foi limpo!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao resetar mês: {e}")
 
 # ========================================================
 # 8. ASSISTENTE IA 
