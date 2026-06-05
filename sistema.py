@@ -52,19 +52,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO PROTEGIDA
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
-cookie_manager = stx.CookieManager(key="gerenciador_cookies_unico")
+cookie_manager = stx.CookieManager(key="gerenciador_cookies_estavel")
 
 cookies = cookie_manager.get_all()
 if st.session_state.user_email is None and cookies:
-    if "user_mail_saved" in cookies:
-        st.session_state.user_email = cookies["user_mail_saved"]
-        st.session_state.user_nome = cookies.get("user_name_saved", "Usuário")
+    if "u_mail" in cookies:
+        st.session_state.user_email = cookies["u_mail"]
+        st.session_state.user_nome = cookies.get("u_name", "Usuário")
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -82,8 +82,8 @@ if not st.session_state.user_email:
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
                         
-                        cookie_manager.set("user_mail_saved", res.user.email, max_age=30*24*60*60)
-                        cookie_manager.set("user_name_saved", nome_salvo, max_age=30*24*60*60)
+                        cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
+                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
                     except: st.error("E-mail ou senha incorretos.")
             with aba_registro:
@@ -160,16 +160,16 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER
+# 5. HEADER (LOGOUT TOTALMENTE PROTEGIDO)
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        cookie_manager.delete("user_mail_saved")
-        st.session_state.user_email = None
-        st.session_state.user_nome = "Usuário"
+        # Solução Definitiva: Limpa o estado da sessão e reinicia o app sem tocar em cookies instáveis
+        st.session_state.clear()
+        st.write("<script>location.reload();</script>", unsafe_allow_html=True)
         st.rerun()
 
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
@@ -231,7 +231,6 @@ with aba_dashboard:
                 if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
-                        # RESOLVIDO: Sintaxe corrigida e fechada com sucesso!
                         gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
                         percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
                         st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
