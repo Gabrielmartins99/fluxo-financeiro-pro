@@ -181,7 +181,7 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD (COM NOVOS GRÁFICOS DE RESPONSÁVEL E ORIGEM)
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
@@ -206,7 +206,6 @@ with aba_dashboard:
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # LINHA 1: Categorias e Descrição
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
@@ -215,13 +214,11 @@ with aba_dashboard:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # LINHA 2: NOVOS GRÁFICOS (Responsável e Destino)
                 col_graf3, col_graf4 = st.columns(2)
                 with col_graf3:
                     df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
                     st.plotly_chart(px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável (Quem Pagou)"), use_container_width=True)
                 with col_graf4:
-                    # Filtra para evitar vazios no gráfico de destino
                     df_dest = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Origem_Destino"] != "")]
                     if not df_dest.empty:
                         df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
@@ -267,7 +264,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM FILTROS)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -367,16 +364,42 @@ with aba_lancamentos:
                     time.sleep(1)
                     st.rerun()
 
+    # ========================================================
+    # ATUALIZAÇÃO PREMIUM: FILTROS INTELIGENTES ANTES DE EDITAR
+    # ========================================================
     with aba_gerenciar:
         st.markdown("### ✏️ Mesa de Operações: Edição Visual e Exclusão em Massa")
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
+            # Prepara a base de visualização
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino"]].copy()
             df_view.insert(0, "Apagar?", False)
             
-            st.write("🔒 **Instruções Dinâmicas:** Edite os dados diretamente na tabela abaixo e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'**.")
+            # Painel de Filtros Inteligentes
+            st.markdown("#### 🔍 Filtros de Busca")
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1:
+                opcoes_tipo = ["Todos", "Despesa", "Receita", "Investimento"]
+                filtro_tipo = st.selectbox("Filtrar por Tipo", opcoes_tipo)
+            with c_f2:
+                opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
+                filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
+            with c_f3:
+                opcoes_cat = ["Todas"] + sorted(df_view["Categoria"].unique())
+                filtro_cat = st.selectbox("Filtrar por Categoria", opcoes_cat)
             
+            # Aplica os filtros na tabela antes de mostrá-la
+            if filtro_tipo != "Todos":
+                df_view = df_view[df_view["Tipo"] == filtro_tipo]
+            if filtro_comp != "Todos":
+                df_view = df_view[df_view["Competencia"] == filtro_comp]
+            if filtro_cat != "Todas":
+                df_view = df_view[df_view["Categoria"] == filtro_cat]
+            
+            st.write(f"🔒 **Instruções Dinâmicas:** Mostrando {len(df_view)} lançamentos. Edite os dados na tabela e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'**.")
+            
+            # Editor renderiza apenas os dados filtrados
             df_resultado = st.data_editor(
                 df_view, 
                 hide_index=True, 
@@ -387,11 +410,11 @@ with aba_lancamentos:
             ids_para_apagar = df_resultado[df_resultado["Apagar?"] == True]["ID"].tolist()
             
             c_op1, c_op2 = st.columns(2)
-            
             with c_op1:
                 if st.button("💾 Salvar Edições da Tabela", type="primary", use_container_width=True):
                     try:
                         mudancas_realizadas = 0
+                        # O loop agora compara linha a linha do resultado filtrado com a visualização filtrada original
                         for idx in range(len(df_resultado)):
                             row_editada = df_resultado.iloc[idx]
                             row_original = df_view.iloc[idx]
@@ -421,7 +444,7 @@ with aba_lancamentos:
                                     mudancas_realizadas += 1
                         
                         if mudancas_realizadas > 0:
-                            st.success(f"✅ Sucesso! {mudancas_realizadas} lançamentos foram atualizados.")
+                            st.success(f"✅ Sucesso! {mudancas_realizadas} lançamentos atualizados.")
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -438,17 +461,6 @@ with aba_lancamentos:
                             time.sleep(1)
                             st.rerun()
                         except Exception as e: st.error(f"Erro ao excluir: {e}")
-            
-            st.markdown("<br><hr>", unsafe_allow_html=True)
-            meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-            mes_reset = st.selectbox("Limpeza Rápida: Selecione um mês para esvaziar os dados:", meses_disponiveis)
-            if st.button(f"🚨 Limpar Mês {mes_reset} Inteiro"):
-                try:
-                    supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
-                    st.error("Mês limpo!")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e: st.error(f"Erro ao limpar mês: {e}")
 
 # ========================================================
 # 8. ASSISTENTE IA 
