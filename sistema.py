@@ -124,9 +124,14 @@ def carregar_dados():
             else: df["Origem_Destino"] = ""
             if "Status" not in df.columns: df["Status"] = "Pago"
             if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
+            
+            # NOVO: Criação da coluna de Mês de Pagamento extraída da Data do Ocorrido (Regime de Caixa)
+            df["Mes_Pagamento"] = pd.to_datetime(df["Data"], errors='coerce').dt.strftime("%Y-%m")
+            
             return df
     except: pass
-    return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
+    # Retorna DataFrame vazio mas com a nova coluna incluída
+    return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
 df = carregar_dados()
 
@@ -137,7 +142,6 @@ def obter_opcoes(coluna, lista_base):
     return sorted(lista_base)
 
 def obter_subcategorias_dinamicas(categoria_alvo):
-    # Base inicial sugerida conforme os seus exemplos
     base = []
     if categoria_alvo == "Moradia": base = ["Aluguel", "Energia", "Internet", "Água", "Condomínio"]
     elif categoria_alvo == "Viagens": base = ["Airbnb", "Hotéis", "Passagens", "Alimentação"]
@@ -145,7 +149,6 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     elif categoria_alvo == "Salário": base = ["Salário Fixo", "Comissão", "Bonificação", "13º"]
     else: base = ["Geral"]
     
-    # Adiciona as subcategorias que você já criou no banco para essa categoria
     if not df.empty and "Subcategoria" in df.columns and "Categoria" in df.columns:
         existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist()
         return sorted(list(set(base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
@@ -198,16 +201,30 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD (COM CONTROLE DE REGIME DE CAIXA/COMPETÊNCIA)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
         with dash_mensal:
-            st.markdown("#### 🔍 Filtros do Painel (O seu Custo Real)")
+            
+            # NOVO: O interruptor que decide como o sistema filtra as datas
+            st.markdown("#### 🎯 Qual Regime Financeiro desejas visualizar?")
+            tipo_visao = st.radio(
+                "Seleciona o modo de visualização:",
+                ["Regime de Caixa (Data do Pagamento real)", "Regime de Competência (Mês de referência do custo)"],
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+            
+            # A lógica de programação: define qual coluna o filtro principal vai utilizar
+            coluna_data_filtro = "Mes_Pagamento" if "Caixa" in tipo_visao else "Competencia"
+            
+            st.markdown("#### 🔍 Filtros do Painel (O teu Custo Real)")
             c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
             with c_filtro1:
-                mes_selecionado = st.selectbox("Competência", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
+                meses_disponiveis = sorted(df[coluna_data_filtro].dropna().unique(), reverse=True)
+                mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + meses_disponiveis)
             with c_filtro2:
                 opcoes_resp_dash = ["Todos"] + sorted(df["Responsavel"].unique())
                 resp_selecionado = st.selectbox("Responsável (De quem é o custo?)", opcoes_resp_dash)
@@ -215,9 +232,10 @@ with aba_dashboard:
                 opcoes_status_dash = ["Todos", "Pago", "Pendente"]
                 status_selecionado = st.selectbox("Status", opcoes_status_dash)
             
+            # Aplicação dinâmica do filtro escolhido
             df_dash = df.copy()
             if mes_selecionado != "Ver Tudo":
-                df_dash = df_dash[df_dash["Competencia"] == mes_selecionado]
+                df_dash = df_dash[df_dash[coluna_data_filtro] == mes_selecionado]
             if resp_selecionado != "Todos":
                 df_dash = df_dash[df_dash["Responsavel"] == resp_selecionado]
             if status_selecionado != "Todos":
@@ -262,7 +280,8 @@ with aba_dashboard:
             except: st.warning("Processando gerador de PDF...")
         
         with dash_anual:
-            st.plotly_chart(px.bar(df.groupby(["Competencia", "Tipo"])["Valor"].sum().reset_index(), x="Competencia", y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
+            # O gráfico anual também respeitará o regime escolhido (Caixa ou Competência)
+            st.plotly_chart(px.bar(df.groupby([coluna_data_filtro, "Tipo"])["Valor"].sum().reset_index(), x=coluna_data_filtro, y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
             
         with dash_metas:
             c_meta1, c_meta2 = st.columns([1, 2])
@@ -279,6 +298,8 @@ with aba_dashboard:
             with c_meta2:
                 mes_atual_metas = datetime.now().strftime("%Y-%m")
                 st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
+                
+                # As metas são sempre baseadas na Competência (planeamento mensal)
                 df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
                 if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
@@ -315,7 +336,6 @@ with aba_lancamentos:
                 cat_sel = st.selectbox("Categoria", opcoes_cat)
                 categoria = st.text_input("Nome da Nova Categoria:") if cat_sel == "➕ Nova Categoria..." else cat_sel
             with c4_sub:
-                # O Cérebro Digital adapta a subcategoria com base na Categoria escolhida ao lado!
                 opcoes_subcat = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
                 subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
                 subcategoria = st.text_input("Nome da Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
@@ -374,7 +394,6 @@ with aba_lancamentos:
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
-                    # O novo campo "subcategoria" é incluído aqui ao guardar na base de dados
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
@@ -413,7 +432,6 @@ with aba_lancamentos:
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            # Subcategoria incluída na visão da tabela mestre
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             df_view.insert(0, "Apagar?", False)
             
