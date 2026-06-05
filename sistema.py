@@ -122,6 +122,7 @@ def carregar_dados():
             df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
             if "Origem_Destino" in df.columns: df["Origem_Destino"] = df["Origem_Destino"].fillna("")
             else: df["Origem_Destino"] = ""
+            if "Status" not in df.columns: df["Status"] = "Pago"
             return df
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
@@ -156,12 +157,12 @@ def gerar_pdf(df_mes, mes_selecionado):
     pdf.cell(190, 8, f"Saldo Final em Conta: R$ {(t_rec - t_desp - t_inv):.2f}", 0, 1, 'L')
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(190, 10, "Ultimos Lancamentos do Mes:", 0, 1, 'L')
+    pdf.cell(190, 10, "Ultimos Lancamentos:", 0, 1, 'L')
     pdf.set_font("Arial", '', 10)
     df_lista = df_mes.sort_values("Data", ascending=False).head(30)
     for index, row in df_lista.iterrows():
         desc = str(row['Descricao'])[:30] 
-        linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Categoria'][:15]} | {desc} | R$ {row['Valor']:.2f}"
+        linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Responsavel'][:10]} | {desc} | R$ {row['Valor']:.2f}"
         pdf.cell(190, 6, linha_texto, 0, 1, 'L')
     return pdf.output(dest="S").encode("latin-1")
 
@@ -181,22 +182,39 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD (CONTROLE TOTAL)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
         with dash_mensal:
-            col_filtro1, _ = st.columns(2)
-            with col_filtro1:
-                mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
+            # FILTROS DE RAIO-X: Aqui está o "Controle Total"
+            st.markdown("#### 🔍 Filtros do Painel (O seu Custo Real)")
+            c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
+            with c_filtro1:
+                mes_selecionado = st.selectbox("Competência", ["Ver Tudo"] + sorted(df["Competencia"].unique(), reverse=True))
+            with c_filtro2:
+                opcoes_resp_dash = ["Todos"] + sorted(df["Responsavel"].unique())
+                resp_selecionado = st.selectbox("Responsável (De quem é o custo?)", opcoes_resp_dash)
+            with c_filtro3:
+                opcoes_status_dash = ["Todos", "Pago", "Pendente"]
+                status_selecionado = st.selectbox("Status", opcoes_status_dash)
             
-            df_dash = df[df["Competencia"] == mes_selecionado] if mes_selecionado != "Ver Tudo" else df.copy()
+            # Aplicando os filtros para recriar a realidade financeira
+            df_dash = df.copy()
+            if mes_selecionado != "Ver Tudo":
+                df_dash = df_dash[df_dash["Competencia"] == mes_selecionado]
+            if resp_selecionado != "Todos":
+                df_dash = df_dash[df_dash["Responsavel"] == resp_selecionado]
+            if status_selecionado != "Todos":
+                df_dash = df_dash[df_dash["Status"] == status_selecionado]
+            
             t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
             t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
             saldo_liquido = t_rec - t_desp - t_inv
             
+            st.markdown("<br>", unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns(4)
             c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Conta (Sobra)</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
             c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
@@ -205,31 +223,28 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
                 with col_graf2: 
-                    st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
+                    df_top5 = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                    st.plotly_chart(px.bar(df_top5, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf3, col_graf4 = st.columns(2)
                 with col_graf3:
                     df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
-                    st.plotly_chart(px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável (Quem Pagou)"), use_container_width=True)
+                    st.plotly_chart(px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável"), use_container_width=True)
                 with col_graf4:
                     df_dest = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Origem_Destino"] != "")]
                     if not df_dest.empty:
-                        df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=False).head(5)
-                        st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores (Para onde foi o dinheiro)"), use_container_width=True)
-                    else:
-                        st.info("💡 Adicione o local de Origem/Destino nos seus lançamentos para gerar este ranking.")
+                        df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                        st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores"), use_container_width=True)
 
             st.markdown("---")
             try:
-                pdf_bytes = gerar_pdf(df_dash, str(mes_selecionado))
-                st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro_{mes_selecionado}.pdf", mime="application/pdf", type="primary")
+                pdf_bytes = gerar_pdf(df_dash, f"{mes_selecionado} - Filtro: {resp_selecionado}")
+                st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro.pdf", mime="application/pdf", type="primary")
             except: st.warning("Processando gerador de PDF...")
         
         with dash_anual:
@@ -264,7 +279,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM FILTROS)
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM STATUS)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -311,7 +326,13 @@ with aba_lancamentos:
                 competencia_final = f"{ano_comp}-{mes_num}"
                 
             st.markdown("---")
-            modo_lancamento = st.radio("Frequência de Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
+            c11, c12 = st.columns(2)
+            with c11:
+                modo_lancamento = st.radio("Frequência de Lançamento:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
+            with c12:
+                # O PODER DO STATUS: O usuário escolhe se a conta já foi paga ou se está pendente (ex: Compra pro Sérgio)
+                status_pagamento = st.selectbox("Status atual do Lançamento", ["Pago", "Pendente"])
+                
             if modo_lancamento == "Parcelado": parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
             elif modo_lancamento == "Assinatura Mensal": parcelas = st.number_input("Projetar por quantos meses?", min_value=2, max_value=60, value=12)
             else: parcelas = 1
@@ -331,7 +352,10 @@ with aba_lancamentos:
                     origem_segura = origem_destino if origem_destino else ""
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
+                    # Status inteligente: A primeira parcela respeita o que você marcou, as do futuro nascem como Pendentes.
+                    status_final = status_pagamento if i == 0 else "Pendente"
+                    
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
@@ -357,26 +381,22 @@ with aba_lancamentos:
                 for index, row in df_editado.iterrows():
                     try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": "Eu", "origem_destino": "", "status": "Pago"})
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
                 if novas_linhas:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Importado!")
                     time.sleep(1)
                     st.rerun()
 
-    # ========================================================
-    # ATUALIZAÇÃO PREMIUM: FILTROS INTELIGENTES ANTES DE EDITAR
-    # ========================================================
     with aba_gerenciar:
         st.markdown("### ✏️ Mesa de Operações: Edição Visual e Exclusão em Massa")
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            # Prepara a base de visualização
-            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino"]].copy()
+            # Expondo a coluna Status para a tabela
+            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             df_view.insert(0, "Apagar?", False)
             
-            # Painel de Filtros Inteligentes
             st.markdown("#### 🔍 Filtros de Busca")
             c_f1, c_f2, c_f3 = st.columns(3)
             with c_f1:
@@ -386,20 +406,18 @@ with aba_lancamentos:
                 opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
                 filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
             with c_f3:
-                opcoes_cat = ["Todas"] + sorted(df_view["Categoria"].unique())
-                filtro_cat = st.selectbox("Filtrar por Categoria", opcoes_cat)
+                opcoes_resp = ["Todos"] + sorted(df_view["Responsavel"].unique())
+                filtro_resp = st.selectbox("Filtrar por Responsável", opcoes_resp)
             
-            # Aplica os filtros na tabela antes de mostrá-la
             if filtro_tipo != "Todos":
                 df_view = df_view[df_view["Tipo"] == filtro_tipo]
             if filtro_comp != "Todos":
                 df_view = df_view[df_view["Competencia"] == filtro_comp]
-            if filtro_cat != "Todas":
-                df_view = df_view[df_view["Categoria"] == filtro_cat]
+            if filtro_resp != "Todos":
+                df_view = df_view[df_view["Responsavel"] == filtro_resp]
             
-            st.write(f"🔒 **Instruções Dinâmicas:** Mostrando {len(df_view)} lançamentos. Edite os dados na tabela e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'**.")
+            st.write(f"🔒 **Instruções Dinâmicas:** Mostrando {len(df_view)} lançamentos. Edite a coluna **Status** para gerir pendências e clique em **'Salvar Edições'**.")
             
-            # Editor renderiza apenas os dados filtrados
             df_resultado = st.data_editor(
                 df_view, 
                 hide_index=True, 
@@ -414,7 +432,6 @@ with aba_lancamentos:
                 if st.button("💾 Salvar Edições da Tabela", type="primary", use_container_width=True):
                     try:
                         mudancas_realizadas = 0
-                        # O loop agora compara linha a linha do resultado filtrado com a visualização filtrada original
                         for idx in range(len(df_resultado)):
                             row_editada = df_resultado.iloc[idx]
                             row_original = df_view.iloc[idx]
@@ -428,6 +445,7 @@ with aba_lancamentos:
                                     str(row_editada["Conta_Cartao"]) != str(row_original["Conta_Cartao"]) or
                                     str(row_editada["Responsavel"]) != str(row_original["Responsavel"]) or
                                     str(row_editada["Origem_Destino"]) != str(row_original["Origem_Destino"]) or
+                                    str(row_editada["Status"]) != str(row_original["Status"]) or
                                     str(row_editada["Tipo"]) != str(row_original["Tipo"])):
                                     
                                     supabase.table("lancamentos").update({
@@ -439,7 +457,8 @@ with aba_lancamentos:
                                         "descricao": str(row_editada["Descricao"]),
                                         "valor": float(row_editada["Valor"]),
                                         "responsavel": str(row_editada["Responsavel"]),
-                                        "origem_destino": str(row_editada["Origem_Destino"])
+                                        "origem_destino": str(row_editada["Origem_Destino"]),
+                                        "status": str(row_editada["Status"])
                                     }).eq("id", str(row_editada["ID"])).execute()
                                     mudancas_realizadas += 1
                         
