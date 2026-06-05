@@ -316,7 +316,11 @@ with aba_lancamentos:
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
             with c8: descricao = st.text_input("Descrição Resumida")
             
-            with c9: ano_comp = st.selectbox("Ano Competência", [2026, 2027, 2028])
+            with c9: 
+                # ATUALIZAÇÃO: Seletor de Anos expandido de 2020 a 2035 para lançamentos passados!
+                ano_atual = datetime.now().year
+                anos_lista = list(range(2020, 2035))
+                ano_comp = st.selectbox("Ano Competência", anos_lista, index=anos_lista.index(ano_atual))
             with c10:
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
                 mes_sel = st.selectbox("Mês Competência (Fatura)", meses_nomes, index=datetime.now().month - 1)
@@ -391,7 +395,6 @@ with aba_lancamentos:
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             df_view.insert(0, "Apagar?", False)
             
-            # ATUALIZAÇÃO: O bloco de filtros agora conta com 4 colunas em vez de 3
             st.markdown("#### 🔍 Filtros de Busca")
             c_f1, c_f2, c_f3, c_f4 = st.columns(4)
             with c_f1:
@@ -404,11 +407,9 @@ with aba_lancamentos:
                 opcoes_resp = ["Todos"] + sorted(df_view["Responsavel"].unique())
                 filtro_resp = st.selectbox("Filtrar por Responsável", opcoes_resp)
             with c_f4:
-                # O novo filtro entra em ação aqui
                 opcoes_status = ["Todos", "Pago", "Pendente"]
                 filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
             
-            # Aplicando a lógica de triagem para limpar a tela
             if filtro_tipo != "Todos":
                 df_view = df_view[df_view["Tipo"] == filtro_tipo]
             if filtro_comp != "Todos":
