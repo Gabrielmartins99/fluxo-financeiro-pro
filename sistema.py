@@ -52,25 +52,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO BLINDADA (ÚNICO COOKIE)
+# 3. AUTENTICAÇÃO COM VERIFICAÇÃO EM TEMPO REAL
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
-# Inicialização única do gerenciador para evitar conflitos de componentes
-cookie_manager = stx.CookieManager(key="cm_auth_v5")
+cookie_manager = stx.CookieManager(key="gerenciador_cookies_seguro_v3")
 
-if st.session_state.user_email is None:
-    cookie_auth = cookie_manager.get(cookie="app_auth_data")
-    if cookie_auth:
+cookies = cookie_manager.get_all()
+if st.session_state.user_email is None and cookies:
+    if "u_mail" in cookies and cookies["u_mail"]:
+        email_candidato = cookies["u_mail"]
+        nome_candidato = cookies.get("u_name", "Usuário")
         try:
-            # O sistema desempacota o email e o nome salvos na mesma string separada por barra vertical (|)
-            dados = str(cookie_auth).split("|")
-            st.session_state.user_email = dados[0]
-            st.session_state.user_nome = dados[1] if len(dados) > 1 else "Usuário"
+            teste_auth = supabase.auth.get_session()
+            st.session_state.user_email = email_candidato
+            st.session_state.user_nome = nome_candidato
         except:
-            pass
+            st.session_state.user_email = None
+            st.session_state.user_nome = "Usuário"
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -87,12 +88,10 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
-                        
-                        # Salva tudo em um único cookie seguro para evitar o erro DuplicateElementKey
-                        cookie_pacote = f"{res.user.email}|{nome_salvo}"
-                        cookie_manager.set("app_auth_data", cookie_pacote, max_age=30*24*60*60)
+                        cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
+                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
-                    except: st.error("E-mail ou senha incorretos.")
+                    except: st.error("E-mail ou senha incorretos ou usuário inexistente no Supabase.")
             with aba_registro:
                 st.markdown("#### Cadastro de Novo Membro")
                 nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
@@ -107,7 +106,7 @@ if not st.session_state.user_email:
                                 "options": {"data": {"primeiro_nome": nome_reg.strip()}}
                             })
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
-                        except: st.error("Erro ao criar conta no servidor.")
+                        except: st.error("Erro ao criar conta.")
                     else: st.warning("Por favor, informe seu primeiro nome.")
     st.stop()
 
@@ -167,15 +166,15 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER COM LOGOUT IMEDIATO
+# 5. HEADER
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.write(f"👤 Olá, **{st.session_state.user_nome}**")
     if st.button("Sair (Logout)"):
-        # Executa uma única ação de limpeza no cookie para evitar colisão visual
-        cookie_manager.delete("app_auth_data")
+        cookie_manager.set("u_mail", "", max_age=-1)
+        cookie_manager.set("u_name", "", max_age=-1)
         st.session_state.clear()
         st.rerun()
 
@@ -248,7 +247,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E ELIMINAÇÃO EM MASSA
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (ESTILO EXCEL)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -313,7 +312,11 @@ with aba_lancamentos:
                     y = start_year + (m // 12)
                     comp = f"{y}-{(m % 12) + 1:02d}"
                     origem_segura = origem_destino if origem_destino else ""
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": data_compra.strftime("%Y-%m-%d"), "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
+                    
+                    # PROJEÇÃO INTELIGENTE DE DATAS: Avança o mês da data de ocorrência automaticamente
+                    nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
+                    
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": "Pago" if i == 0 else "Pendente"})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
@@ -347,29 +350,78 @@ with aba_lancamentos:
                     st.rerun()
 
     with aba_gerenciar:
-        st.markdown("### ✏️ Painel de Controle e Limpeza de Lançamentos")
+        st.markdown("### ✏️ Mesa de Operações: Edição Visual e Exclusão em Massa")
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"]].copy()
             df_view.insert(0, "Apagar?", False)
             
-            st.write("🔒 **Instruções:** Selecione as caixas na coluna **'Apagar?'** e clique no botão abaixo para eliminar em massa.")
-            df_resultado = st.data_editor(df_view, hide_index=True, use_container_width=True, disabled=["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor"])
+            st.write("🔒 **Instruções Dinâmicas:** Para ajustar o dia do salário, dê um duplo clique na célula **'Data'**, altere e clique em **'Salvar Edições'**. Para excluir, marque as caixas na coluna **'Apagar?'** e confirme.")
+            
+            # Editor 100% interativo: Apenas o ID é intocável. O resto pode ser alterado livremente!
+            df_resultado = st.data_editor(
+                df_view, 
+                hide_index=True, 
+                use_container_width=True, 
+                disabled=["ID"] 
+            )
+            
             ids_para_apagar = df_resultado[df_resultado["Apagar?"] == True]["ID"].tolist()
             
-            if ids_para_apagar:
-                if st.button(f"🗑️ Apagar {len(ids_para_apagar)} Selecionados", type="primary"):
+            c_op1, c_op2 = st.columns(2)
+            
+            with c_op1:
+                if st.button("💾 Salvar Edições da Tabela", type="primary", use_container_width=True):
                     try:
-                        supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
-                        st.success("Lançamentos Removidos com Sucesso!")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e: st.error(f"Erro ao excluir: {e}")
+                        mudancas_realizadas = 0
+                        # O sistema faz uma varredura para atualizar automaticamente tudo o que você editou
+                        for idx in range(len(df_resultado)):
+                            row_editada = df_resultado.iloc[idx]
+                            row_original = df_view.iloc[idx]
+                            
+                            if not row_editada["Apagar?"]:
+                                if (row_editada["Data"] != row_original["Data"] or
+                                    row_editada["Valor"] != row_original["Valor"] or
+                                    row_editada["Competencia"] != row_original["Competencia"] or
+                                    row_editada["Descricao"] != row_original["Descricao"] or
+                                    row_editada["Categoria"] != row_original["Categoria"] or
+                                    row_editada["Conta_Cartao"] != row_original["Conta_Cartao"] or
+                                    row_editada["Tipo"] != row_original["Tipo"]):
+                                    
+                                    supabase.table("lancamentos").update({
+                                        "data_compra": str(row_editada["Data"]),
+                                        "competencia": str(row_editada["Competencia"]),
+                                        "tipo": str(row_editada["Tipo"]),
+                                        "categoria": str(row_editada["Categoria"]),
+                                        "conta_cartao": str(row_editada["Conta_Cartao"]),
+                                        "descricao": str(row_editada["Descricao"]),
+                                        "valor": float(row_editada["Valor"])
+                                    }).eq("id", str(row_editada["ID"])).execute()
+                                    mudancas_realizadas += 1
+                        
+                        if mudancas_realizadas > 0:
+                            st.success(f"✅ Sucesso! {mudancas_realizadas} lançamentos foram atualizados.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.info("Nenhuma edição de valor ou texto foi detectada.")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar edições: {e}")
+            
+            with c_op2:
+                if ids_para_apagar:
+                    if st.button(f"🗑️ Apagar {len(ids_para_apagar)} Selecionados", use_container_width=True):
+                        try:
+                            supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
+                            st.error("Lançamentos Removidos com Sucesso!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: st.error(f"Erro ao excluir: {e}")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
             meses_disponiveis = sorted(df["Competencia"].unique(), reverse=True)
-            mes_reset = st.selectbox("Selecione um mês inteiro para limpar todos os dados de uma vez:", meses_disponiveis)
+            mes_reset = st.selectbox("Limpeza Rápida: Selecione um mês para esvaziar todos os dados associados a ele:", meses_disponiveis)
             if st.button(f"🚨 Limpar Mês {mes_reset} Inteiro"):
                 try:
                     supabase.table("lancamentos").delete().eq("user_email", st.session_state.user_email).eq("competencia", mes_reset).execute()
