@@ -123,6 +123,7 @@ def carregar_dados():
             if "Origem_Destino" in df.columns: df["Origem_Destino"] = df["Origem_Destino"].fillna("")
             else: df["Origem_Destino"] = ""
             if "Status" not in df.columns: df["Status"] = "Pago"
+            if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
             return df
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
@@ -135,9 +136,24 @@ def obter_opcoes(coluna, lista_base):
         return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
     return sorted(lista_base)
 
+def obter_subcategorias_dinamicas(categoria_alvo):
+    # Base inicial sugerida conforme os seus exemplos
+    base = []
+    if categoria_alvo == "Moradia": base = ["Aluguel", "Energia", "Internet", "Água", "Condomínio"]
+    elif categoria_alvo == "Viagens": base = ["Airbnb", "Hotéis", "Passagens", "Alimentação"]
+    elif categoria_alvo == "Assinaturas": base = ["Netflix", "Amazon", "Spotify", "Software"]
+    elif categoria_alvo == "Salário": base = ["Salário Fixo", "Comissão", "Bonificação", "13º"]
+    else: base = ["Geral"]
+    
+    # Adiciona as subcategorias que você já criou no banco para essa categoria
+    if not df.empty and "Subcategoria" in df.columns and "Categoria" in df.columns:
+        existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist()
+        return sorted(list(set(base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
+    return sorted(base)
+
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Dinheiro/Pix"]
-LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
+LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 def gerar_pdf(df_mes, mes_selecionado):
     pdf = FPDF()
@@ -293,18 +309,23 @@ with aba_lancamentos:
 
         with st.container(border=True):
             st.markdown("#### 2. Classificação")
-            c4, c5, c6 = st.columns(3)
-            with c4:
+            c4_cat, c4_sub, c5, c6 = st.columns(4)
+            with c4_cat:
                 opcoes_cat = obter_opcoes("Categoria", LISTA_CATEGORIAS) + ["➕ Nova Categoria..."]
                 cat_sel = st.selectbox("Categoria", opcoes_cat)
                 categoria = st.text_input("Nome da Nova Categoria:") if cat_sel == "➕ Nova Categoria..." else cat_sel
+            with c4_sub:
+                # O Cérebro Digital adapta a subcategoria com base na Categoria escolhida ao lado!
+                opcoes_subcat = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
+                subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
+                subcategoria = st.text_input("Nome da Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
             with c5:
                 opcoes_conta = obter_opcoes("Conta_Cartao", LISTA_BANCOS) + ["➕ Nova Conta..."]
                 conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
                 conta_cartao = st.text_input("Nome da Nova Conta:") if conta_sel == "➕ Nova Conta..." else conta_sel
             with c6:
                 opcoes_orig = obter_opcoes("Origem_Destino", ["Supermercado", "Pix", "Empresa"]) + ["➕ Nova Origem/Destino..."]
-                orig_sel = st.selectbox("Origem / Destino (Ex: Estabelecimento)", opcoes_orig)
+                orig_sel = st.selectbox("Origem / Destino", opcoes_orig)
                 origem_destino = st.text_input("Nome da Nova Origem/Destino:") if orig_sel == "➕ Nova Origem/Destino..." else orig_sel
 
         with st.container(border=True):
@@ -312,18 +333,17 @@ with aba_lancamentos:
             c7, c8, c9, c10 = st.columns(4)
             with c7:
                 opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
-                resp_sel = st.selectbox("Responsável (Quem paga/pagou)", opcoes_resp)
+                resp_sel = st.selectbox("Responsável", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
             with c8: descricao = st.text_input("Descrição Resumida")
             
             with c9: 
-                # ATUALIZAÇÃO: Seletor de Anos expandido de 2020 a 2035 para lançamentos passados!
                 ano_atual = datetime.now().year
                 anos_lista = list(range(2020, 2035))
                 ano_comp = st.selectbox("Ano Competência", anos_lista, index=anos_lista.index(ano_atual))
             with c10:
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
-                mes_sel = st.selectbox("Mês Competência (Fatura)", meses_nomes, index=datetime.now().month - 1)
+                mes_sel = st.selectbox("Mês Competência", meses_nomes, index=datetime.now().month - 1)
                 mes_num = mes_sel.split(" - ")[0]
                 competencia_final = f"{ano_comp}-{mes_num}"
                 
@@ -354,7 +374,8 @@ with aba_lancamentos:
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": "Geral", "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
+                    # O novo campo "subcategoria" é incluído aqui ao guardar na base de dados
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
@@ -380,7 +401,7 @@ with aba_lancamentos:
                 for index, row in df_editado.iterrows():
                     try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Geral", "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
                 if novas_linhas:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Importado!")
@@ -392,7 +413,8 @@ with aba_lancamentos:
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
+            # Subcategoria incluída na visão da tabela mestre
+            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             df_view.insert(0, "Apagar?", False)
             
             st.markdown("#### 🔍 Filtros de Busca")
@@ -419,7 +441,7 @@ with aba_lancamentos:
             if filtro_status != "Todos":
                 df_view = df_view[df_view["Status"] == filtro_status]
             
-            st.write(f"🔒 **Instruções Dinâmicas:** Mostrando {len(df_view)} lançamentos. Edite a coluna **Status** para gerir pendências e clique em **'Salvar Edições'**.")
+            st.write(f"🔒 **Instruções:** Editando {len(df_view)} lançamentos. A coluna **Subcategoria** já está disponível para correções em massa.")
             
             df_resultado = st.data_editor(
                 df_view, 
@@ -445,6 +467,7 @@ with aba_lancamentos:
                                     str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
                                     str(row_editada["Descricao"]) != str(row_original["Descricao"]) or
                                     str(row_editada["Categoria"]) != str(row_original["Categoria"]) or
+                                    str(row_editada["Subcategoria"]) != str(row_original["Subcategoria"]) or
                                     str(row_editada["Conta_Cartao"]) != str(row_original["Conta_Cartao"]) or
                                     str(row_editada["Responsavel"]) != str(row_original["Responsavel"]) or
                                     str(row_editada["Origem_Destino"]) != str(row_original["Origem_Destino"]) or
@@ -456,6 +479,7 @@ with aba_lancamentos:
                                         "competencia": str(row_editada["Competencia"]),
                                         "tipo": str(row_editada["Tipo"]),
                                         "categoria": str(row_editada["Categoria"]),
+                                        "subcategoria": str(row_editada["Subcategoria"]),
                                         "conta_cartao": str(row_editada["Conta_Cartao"]),
                                         "descricao": str(row_editada["Descricao"]),
                                         "valor": float(row_editada["Valor"]),
@@ -504,7 +528,7 @@ with aba_assistente:
             with st.chat_message("assistant"):
                 with st.spinner("Processando dados internos..."):
                     try:
-                        hist_txt = df[["Data", "Tipo", "Categoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
+                        hist_txt = df[["Data", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
                         prompt_final = f"Atue como o motor financeiro de {st.session_state.user_nome}. Faça somas matemáticas se pedido datas (dia 1 ao 5) ou nomes (iFood).\n\nDADOS:\n{hist_txt}\nPERGUNTA: {prompt}"
                         resposta = modelo_ia.generate_content(prompt_final)
                         st.markdown(resposta.text)
