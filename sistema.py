@@ -111,7 +111,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E LISTAS
+# 4. FUNÇÕES BASE, LISTAS E MOTOR INTELIGENTE
 # ========================================================
 def carregar_dados():
     try:
@@ -125,12 +125,23 @@ def carregar_dados():
             if "Status" not in df.columns: df["Status"] = "Pago"
             if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
             
-            # NOVO: Criação da coluna de Mês de Pagamento extraída da Data do Ocorrido (Regime de Caixa)
-            df["Mes_Pagamento"] = pd.to_datetime(df["Data"], errors='coerce').dt.strftime("%Y-%m")
+            # 🔥 O MOTOR INTELIGENTE DE CAIXA ENTRA AQUI 🔥
+            def determinar_caixa(row):
+                parcela = str(row.get("Parcela", "À vista")).strip()
+                # 1. Se foi pago à vista (ex: Pix da Energia), o caixa baseia-se na Data real do desembolso
+                if parcela == "À vista":
+                    try:
+                        return pd.to_datetime(row["Data"]).strftime("%Y-%m")
+                    except:
+                        return str(row["Competencia"])
+                else:
+                    # 2. Se for Parcelado no Cartão ou Assinatura, o caixa ocorre no mês da Fatura (Competência)
+                    return str(row["Competencia"])
             
+            # Aplica a regra a todas as linhas do banco de dados na hora de mostrar o Dashboard
+            df["Mes_Pagamento"] = df.apply(determinar_caixa, axis=1)
             return df
     except: pass
-    # Retorna DataFrame vazio mas com a nova coluna incluída
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
 df = carregar_dados()
@@ -201,14 +212,13 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD (COM CONTROLE DE REGIME DE CAIXA/COMPETÊNCIA)
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
         with dash_mensal:
             
-            # NOVO: O interruptor que decide como o sistema filtra as datas
             st.markdown("#### 🎯 Qual Regime Financeiro desejas visualizar?")
             tipo_visao = st.radio(
                 "Seleciona o modo de visualização:",
@@ -216,8 +226,6 @@ with aba_dashboard:
                 horizontal=True,
                 label_visibility="collapsed"
             )
-            
-            # A lógica de programação: define qual coluna o filtro principal vai utilizar
             coluna_data_filtro = "Mes_Pagamento" if "Caixa" in tipo_visao else "Competencia"
             
             st.markdown("#### 🔍 Filtros do Painel (O teu Custo Real)")
@@ -226,18 +234,20 @@ with aba_dashboard:
                 meses_disponiveis = sorted(df[coluna_data_filtro].dropna().unique(), reverse=True)
                 mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + meses_disponiveis)
             with c_filtro2:
-                opcoes_resp_dash = ["Todos"] + sorted(df["Responsavel"].unique())
-                resp_selecionado = st.selectbox("Responsável (De quem é o custo?)", opcoes_resp_dash)
+                opcoes_resp_dash = sorted(df["Responsavel"].dropna().unique())
+                resp_selecionados = st.multiselect("Responsáveis (Pode escolher mais de um)", opcoes_resp_dash, default=opcoes_resp_dash)
             with c_filtro3:
                 opcoes_status_dash = ["Todos", "Pago", "Pendente"]
                 status_selecionado = st.selectbox("Status", opcoes_status_dash)
             
-            # Aplicação dinâmica do filtro escolhido
             df_dash = df.copy()
             if mes_selecionado != "Ver Tudo":
                 df_dash = df_dash[df_dash[coluna_data_filtro] == mes_selecionado]
-            if resp_selecionado != "Todos":
-                df_dash = df_dash[df_dash["Responsavel"] == resp_selecionado]
+            if resp_selecionados:
+                df_dash = df_dash[df_dash["Responsavel"].isin(resp_selecionados)]
+            else:
+                df_dash = df_dash.iloc[0:0]
+
             if status_selecionado != "Todos":
                 df_dash = df_dash[df_dash["Status"] == status_selecionado]
             
@@ -255,6 +265,7 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
+                
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
@@ -263,6 +274,7 @@ with aba_dashboard:
                     st.plotly_chart(px.bar(df_top5, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
+                
                 col_graf3, col_graf4 = st.columns(2)
                 with col_graf3:
                     df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
@@ -272,15 +284,29 @@ with aba_dashboard:
                     if not df_dest.empty:
                         df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
                         st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores"), use_container_width=True)
+                        
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                col_graf5, col_graf6 = st.columns(2)
+                with col_graf5:
+                    df_conta = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
+                    st.plotly_chart(px.pie(df_conta, values="Valor", names="Conta_Cartao", title="Gastos por Conta / Cartão"), use_container_width=True)
+                with col_graf6:
+                    df_sub = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Subcategoria"] != "Geral")]
+                    if not df_sub.empty:
+                        df_sub_agrupado = df_sub.groupby("Subcategoria")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                        st.plotly_chart(px.bar(df_sub_agrupado, x="Valor", y="Subcategoria", orientation='h', title="Top 5 Subcategorias Específicas"), use_container_width=True)
+                    else:
+                        st.info("💡 Classifique seus lançamentos em Subcategorias para ativar este gráfico.")
 
             st.markdown("---")
             try:
-                pdf_bytes = gerar_pdf(df_dash, f"{mes_selecionado} - Filtro: {resp_selecionado}")
+                txt_resp = ", ".join(resp_selecionados) if resp_selecionados else "Nenhum"
+                pdf_bytes = gerar_pdf(df_dash, f"{mes_selecionado} - Filtro: {txt_resp}")
                 st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro.pdf", mime="application/pdf", type="primary")
             except: st.warning("Processando gerador de PDF...")
         
         with dash_anual:
-            # O gráfico anual também respeitará o regime escolhido (Caixa ou Competência)
             st.plotly_chart(px.bar(df.groupby([coluna_data_filtro, "Tipo"])["Valor"].sum().reset_index(), x=coluna_data_filtro, y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
             
         with dash_metas:
@@ -297,10 +323,8 @@ with aba_dashboard:
                         st.rerun()
             with c_meta2:
                 mes_atual_metas = datetime.now().strftime("%Y-%m")
-                st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
-                
-                # As metas são sempre baseadas na Competência (planeamento mensal)
                 df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
+                st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
                 if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
                 else:
                     for cat, limite in st.session_state.orcamentos.items():
@@ -444,8 +468,8 @@ with aba_lancamentos:
                 opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
                 filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
             with c_f3:
-                opcoes_resp = ["Todos"] + sorted(df_view["Responsavel"].unique())
-                filtro_resp = st.selectbox("Filtrar por Responsável", opcoes_resp)
+                opcoes_resp_gerenciar = sorted(df_view["Responsavel"].dropna().unique())
+                filtro_resp_multi = st.multiselect("Filtrar por Responsáveis", opcoes_resp_gerenciar, default=opcoes_resp_gerenciar)
             with c_f4:
                 opcoes_status = ["Todos", "Pago", "Pendente"]
                 filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
@@ -454,8 +478,11 @@ with aba_lancamentos:
                 df_view = df_view[df_view["Tipo"] == filtro_tipo]
             if filtro_comp != "Todos":
                 df_view = df_view[df_view["Competencia"] == filtro_comp]
-            if filtro_resp != "Todos":
-                df_view = df_view[df_view["Responsavel"] == filtro_resp]
+            if filtro_resp_multi:
+                df_view = df_view[df_view["Responsavel"].isin(filtro_resp_multi)]
+            else:
+                df_view = df_view.iloc[0:0]
+
             if filtro_status != "Todos":
                 df_view = df_view[df_view["Status"] == filtro_status]
             
