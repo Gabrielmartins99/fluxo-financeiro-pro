@@ -111,7 +111,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE, LISTAS E MOTOR INTELIGENTE
+# 4. FUNÇÕES BASE E NOVO MOTOR DE CAIXA
 # ========================================================
 def carregar_dados():
     try:
@@ -125,21 +125,26 @@ def carregar_dados():
             if "Status" not in df.columns: df["Status"] = "Pago"
             if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
             
-            # 🔥 O MOTOR INTELIGENTE DE CAIXA ENTRA AQUI 🔥
+            # 🔥 CORREÇÃO DEFINITIVA: MOTOR INTELIGENTE DE COMPARAÇÃO DE DATAS 🔥
             def determinar_caixa(row):
-                parcela = str(row.get("Parcela", "À vista")).strip()
-                # 1. Se foi pago à vista (ex: Pix da Energia), o caixa baseia-se na Data real do desembolso
-                if parcela == "À vista":
-                    try:
-                        return pd.to_datetime(row["Data"]).strftime("%Y-%m")
-                    except:
-                        return str(row["Competencia"])
-                else:
-                    # 2. Se for Parcelado no Cartão ou Assinatura, o caixa ocorre no mês da Fatura (Competência)
-                    return str(row["Competencia"])
+                try:
+                    data_ocorreu = pd.to_datetime(row["Data"]).strftime("%Y-%m")
+                    competencia = str(row["Competencia"])
+                    
+                    # Se a data do ocorrido é MAIOR que a competência (Ex: Conta de Maio paga atrasada em Junho)
+                    if data_ocorreu > competencia:
+                        return data_ocorreu # O dinheiro saiu atrasado, usamos a Data Real
+                    
+                    # Se a data do ocorrido for MENOR que a competência (Ex: Hotel de 2025 parcelado para 2026)
+                    # OU se forem iguais (compra normal no mesmo mês)
+                    else:
+                        return competencia # O dinheiro só sai na fatura, usamos a Competência
+                        
+                except:
+                    return str(row.get("Competencia", ""))
             
-            # Aplica a regra a todas as linhas do banco de dados na hora de mostrar o Dashboard
             df["Mes_Pagamento"] = df.apply(determinar_caixa, axis=1)
+            
             return df
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
@@ -296,8 +301,6 @@ with aba_dashboard:
                     if not df_sub.empty:
                         df_sub_agrupado = df_sub.groupby("Subcategoria")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
                         st.plotly_chart(px.bar(df_sub_agrupado, x="Valor", y="Subcategoria", orientation='h', title="Top 5 Subcategorias Específicas"), use_container_width=True)
-                    else:
-                        st.info("💡 Classifique seus lançamentos em Subcategorias para ativar este gráfico.")
 
             st.markdown("---")
             try:
