@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM VERIFICAÇÃO EM TEMPO REAL
+# 3. AUTENTICAÇÃO COM DETETOR DE ERROS (ATUALIZADO)
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -91,7 +91,9 @@ if not st.session_state.user_email:
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
-                    except: st.error("E-mail ou senha incorretos ou usuário inexistente no Supabase.")
+                    except Exception as e: 
+                        # Aqui mostramos o detalhe técnico do porquê o login falhou
+                        st.error(f"Erro ao acessar a conta. Detalhe: {e}")
             with aba_registro:
                 st.markdown("#### Cadastro de Novo Membro")
                 nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
@@ -106,12 +108,14 @@ if not st.session_state.user_email:
                                 "options": {"data": {"primeiro_nome": nome_reg.strip()}}
                             })
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
-                        except: st.error("Erro ao criar conta no Supabase Auth.")
-                    else: st.warning("Por favor, informe seu primeiro nome.")
+                        except Exception as e: 
+                            # A mágica do diagnóstico: O sistema agora diz exatamente qual foi o problema!
+                            st.error(f"Erro ao criar conta. Resposta do Servidor: {e}")
+                    else: st.warning("Por favor, informe seu primeiro nome e e-mail.")
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E NOVO MOTOR DE CAIXA
+# 4. FUNÇÕES BASE, LISTAS E MOTOR INTELIGENTE
 # ========================================================
 def carregar_dados():
     try:
@@ -125,26 +129,15 @@ def carregar_dados():
             if "Status" not in df.columns: df["Status"] = "Pago"
             if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
             
-            # 🔥 CORREÇÃO DEFINITIVA: MOTOR INTELIGENTE DE COMPARAÇÃO DE DATAS 🔥
             def determinar_caixa(row):
                 try:
                     data_ocorreu = pd.to_datetime(row["Data"]).strftime("%Y-%m")
                     competencia = str(row["Competencia"])
-                    
-                    # Se a data do ocorrido é MAIOR que a competência (Ex: Conta de Maio paga atrasada em Junho)
-                    if data_ocorreu > competencia:
-                        return data_ocorreu # O dinheiro saiu atrasado, usamos a Data Real
-                    
-                    # Se a data do ocorrido for MENOR que a competência (Ex: Hotel de 2025 parcelado para 2026)
-                    # OU se forem iguais (compra normal no mesmo mês)
-                    else:
-                        return competencia # O dinheiro só sai na fatura, usamos a Competência
-                        
-                except:
-                    return str(row.get("Competencia", ""))
+                    if data_ocorreu > competencia: return data_ocorreu 
+                    else: return competencia 
+                except: return str(row.get("Competencia", ""))
             
             df["Mes_Pagamento"] = df.apply(determinar_caixa, axis=1)
-            
             return df
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
