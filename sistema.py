@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM DETETOR DE ERROS (ATUALIZADO)
+# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -91,9 +91,13 @@ if not st.session_state.user_email:
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
-                    except Exception as e: 
-                        # Aqui mostramos o detalhe técnico do porquê o login falhou
-                        st.error(f"Erro ao acessar a conta. Detalhe: {e}")
+                    except Exception as e:
+                        erro_str = str(e)
+                        if "Name or service not known" in erro_str or "Errno -2" in erro_str:
+                            st.error("🚨 Erro de Rede: O seu banco de dados (Supabase) entrou em Modo Pausa. Acesse supabase.com e clique em 'Restore'.")
+                        else:
+                            st.error(f"E-mail ou senha incorretos. ({erro_str})")
+                            
             with aba_registro:
                 st.markdown("#### Cadastro de Novo Membro")
                 nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
@@ -109,8 +113,12 @@ if not st.session_state.user_email:
                             })
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
                         except Exception as e: 
-                            # A mágica do diagnóstico: O sistema agora diz exatamente qual foi o problema!
-                            st.error(f"Erro ao criar conta. Resposta do Servidor: {e}")
+                            erro_str = str(e)
+                            # ATUALIZAÇÃO: Se for erro de DNS (Pausado), damos uma mensagem limpa e clara!
+                            if "Name or service not known" in erro_str or "Errno -2" in erro_str:
+                                st.error("🚨 Servidor Offline: O seu banco de dados no Supabase entrou em Modo Pausa por inatividade. Acesse o painel do Supabase e clique em 'Restore' para reativar o sistema.")
+                            else:
+                                st.error(f"Erro ao criar conta. Resposta do Servidor: {erro_str}")
                     else: st.warning("Por favor, informe seu primeiro nome e e-mail.")
     st.stop()
 
@@ -263,7 +271,6 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
@@ -272,7 +279,6 @@ with aba_dashboard:
                     st.plotly_chart(px.bar(df_top5, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf3, col_graf4 = st.columns(2)
                 with col_graf3:
                     df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
@@ -284,7 +290,6 @@ with aba_dashboard:
                         st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores"), use_container_width=True)
                         
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf5, col_graf6 = st.columns(2)
                 with col_graf5:
                     df_conta = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
