@@ -129,7 +129,6 @@ def carregar_dados_completos():
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df_total = pd.DataFrame(response.data)
-            # Os nomes das colunas são padronizados com iniciais maiúsculas
             df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df_total["Valor"] = pd.to_numeric(df_total["Valor"]).fillna(0.0)
             if "Origem_Destino" in df_total.columns: df_total["Origem_Destino"] = df_total["Origem_Destino"].fillna("")
@@ -150,12 +149,9 @@ def carregar_dados_completos():
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-# 🔥 SEPARAÇÃO INTELIGENTE DE DADOS 🔥
+# Separação inteligente dos dados
 df_tudo = carregar_dados_completos()
-
-# Os cartões ficam guardados com a etiqueta especial "Config_Cartao"
 df_cartoes = df_tudo[df_tudo["Tipo"] == "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
-# O Dashboard e os relatórios só veem os lançamentos reais
 df = df_tudo[df_tudo["Tipo"] != "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 
 def obter_opcoes(coluna, lista_base):
@@ -178,7 +174,7 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     return sorted(base)
 
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
-LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "Outro"]
+LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 def gerar_pdf(df_mes, mes_selecionado):
@@ -634,7 +630,7 @@ with aba_lancamentos:
                         else: st.warning("Selecione algum item primeiro.")
 
 # ========================================================
-# 8. ABA DE GERENCIAMENTO DE CARTÕES (COM CORREÇÃO DE CASE SENSITIVE)
+# 8. ABA DE GERENCIAMENTO DE CARTÕES
 # ========================================================
 with aba_cartoes:
     st.markdown("### 💳 Gerenciador de Cartões e Contas")
@@ -644,14 +640,25 @@ with aba_cartoes:
         st.markdown("#### Adicionar Novo Cartão")
         c1, c2, c3 = st.columns(3)
         with c1: 
-            banco_cartao = st.selectbox("Banco / Emissor", LISTA_BANCOS)
+            # 🔥 O CAMPO DE BANCO AGORA É DINÂMICO! 🔥
+            bancos_cadastrados = df_cartoes["Categoria"].dropna().unique().tolist() if not df_cartoes.empty else []
+            lista_bancos_atualizada = sorted(list(set(LISTA_BANCOS + bancos_cadastrados)))
+            opcoes_banco = lista_bancos_atualizada + ["➕ Outro Banco..."]
+            
+            banco_sel = st.selectbox("Banco / Emissor", opcoes_banco)
+            
+            if banco_sel == "➕ Outro Banco...":
+                banco_cartao = st.text_input("Digite o nome do Banco / Emissor:")
+            else:
+                banco_cartao = banco_sel
+                
         with c2: 
             final_cartao = st.text_input("Nome Rápido ou 4 Últimos Dígitos (Ex: 1234)", max_chars=15)
         with c3: 
             dia_vencimento = st.number_input("Dia de Vencimento da Fatura", min_value=1, max_value=31, value=10)
             
         if st.button("💾 Salvar Cartão no Sistema", type="primary"):
-            if final_cartao.strip() != "":
+            if final_cartao.strip() != "" and banco_cartao.strip() != "":
                 nova_linha_cartao = {
                     "user_email": st.session_state.user_email,
                     "data_compra": datetime.now().strftime("%Y-%m-%d"),
@@ -667,18 +674,17 @@ with aba_cartoes:
                 }
                 try:
                     supabase.table("lancamentos").insert(nova_linha_cartao).execute()
-                    st.success("Cartão registado! Agora ele aparecerá nas opções de Lançamento.")
+                    st.success("Cartão registado! Agora ele aparecerá nas opções de Lançamento e de Banco.")
                     time.sleep(1.5)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar cartão: {e}")
             else:
-                st.warning("Por favor, preencha os últimos dígitos ou um nome para o cartão.")
+                st.warning("Por favor, preencha o nome do banco e os últimos dígitos.")
 
     st.markdown("---")
     st.markdown("#### Seus Cartões Registados")
     if not df_cartoes.empty:
-        # CORREÇÃO CRÍTICA APLICADA AQUI: Letras maiúsculas exatas conforme definidas na base de dados
         df_cartoes_view = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].copy()
         df_cartoes_view = df_cartoes_view.rename(columns={"Conta_Cartao": "Nome do Cartão no Sistema", "Categoria": "Banco", "Valor": "Dia de Vencimento"})
         
