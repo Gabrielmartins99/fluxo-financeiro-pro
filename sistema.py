@@ -26,10 +26,11 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 🔥 CORREÇÃO DA IA: Utilizando o modelo Clássico e Universal (gemini-pro) 🔥
+# 🔥 CORREÇÃO DA IA: Utilizando a versão 1.0 explícita 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    modelo_ia = genai.GenerativeModel('gemini-pro')
+    # A designação 'gemini-1.0-pro' é a mais universal para evitar o erro 404
+    modelo_ia = genai.GenerativeModel('gemini-1.0-pro')
 else:
     modelo_ia = None
 
