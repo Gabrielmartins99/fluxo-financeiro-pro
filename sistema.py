@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -202,7 +202,7 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER
+# 5. HEADER E TABS
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -270,7 +270,6 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
-                
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
@@ -339,7 +338,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM FUNÇÃO SPLIT)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -374,14 +373,12 @@ with aba_lancamentos:
                 origem_destino = st.text_input("Nome da Nova Origem/Destino:") if orig_sel == "➕ Nova Origem/Destino..." else orig_sel
 
         with st.container(border=True):
-            st.markdown("#### 3. Detalhes Adicionais")
+            st.markdown("#### 3. Detalhes Adicionais e Rateio (Split)")
             c7, c8, c9, c10 = st.columns(4)
             with c7:
                 opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
-                resp_sel = st.selectbox("Responsável", opcoes_resp)
+                resp_sel = st.selectbox("Responsável Principal", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
-            
-            # ATUALIZAÇÃO: O rótulo explicativo passou a ser universal e descritivo
             with c8: descricao = st.text_input("Descrição Resumida (Ex: Aluguel, Mensalidade Academia)")
             
             with c9: 
@@ -394,6 +391,24 @@ with aba_lancamentos:
                 mes_num = mes_sel.split(" - ")[0]
                 competencia_final = f"{ano_comp}-{mes_num}"
                 
+            st.markdown("---")
+            
+            # 🔥 NOVA FUNCIONALIDADE: DIVISÃO DE DESPESAS (SPLIT) 🔥
+            dividir_despesa = st.checkbox("🤝 Dividir este lançamento com outra pessoa?")
+            if dividir_despesa:
+                col_split1, col_split2 = st.columns(2)
+                with col_split1:
+                    resp_2_sel = st.selectbox("Quem é o 2º Responsável?", opcoes_resp, key="resp_2")
+                    responsavel_2 = st.text_input("Nome do 2º Responsável:", key="txt_resp2") if resp_2_sel == "➕ Novo Responsável..." else resp_2_sel
+                with col_split2:
+                    valor_resp_2 = st.number_input(f"Qual o valor da parte de {responsavel_2}? (R$)", min_value=0.0, max_value=float(valor_total) if valor_total > 0 else 100000.0, step=10.0, format="%.2f")
+                    valor_resp_1 = valor_total - valor_resp_2
+                    st.info(f"A parte de **{responsavel}** será: R$ {valor_resp_1:.2f}")
+            else:
+                valor_resp_1 = valor_total
+                responsavel_2 = None
+                valor_resp_2 = 0.0
+
             st.markdown("---")
             c11, c12 = st.columns(2)
             with c11:
@@ -409,10 +424,8 @@ with aba_lancamentos:
         if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and conta_cartao and responsavel:
                 novas_linhas = []
-                valor_por_mes = valor_total / parcelas if modo_lancamento == "Parcelado" else valor_total
                 start_year = ano_comp
                 start_month = int(mes_num)
-                
                 meses_abrev = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
                 
                 for i in range(parcelas):
@@ -429,7 +442,15 @@ with aba_lancamentos:
                     else:
                         desc_dinamica = descricao.strip()
                     
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
+                    # Salva a linha do Responsável Principal (Gabriel, por exemplo)
+                    valor_parcela_1 = valor_resp_1 / parcelas if modo_lancamento == "Parcelado" else valor_resp_1
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_1, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
+                    
+                    # Salva a linha do Responsável Secundário (Sogro), se existir o split!
+                    if dividir_despesa and valor_resp_2 > 0:
+                        valor_parcela_2 = valor_resp_2 / parcelas if modo_lancamento == "Parcelado" else valor_resp_2
+                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"}) # O segundo responsável nasce como Pendente para você lembrar de cobrar.
+
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
