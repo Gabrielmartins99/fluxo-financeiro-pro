@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -149,25 +149,20 @@ def carregar_dados_completos():
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-# 🔥 O SISTEMA AGORA SEPARA TUDO QUE É CONFIGURAÇÃO DO QUE É LANÇAMENTO REAL 🔥
+# Separação Inteligente de Dados
 df_tudo = carregar_dados_completos()
-# Filtra todas as linhas onde o Tipo começa com "Config_" (Cartões, Categorias, etc)
 df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
-# Filtra apenas transações reais para alimentar o Dashboard
 df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
-# Motor inteligente que junta Cadastros Salvos + Padrão + Lançamentos Antigos
 def obter_opcoes(coluna, lista_base):
-    # 1. Procura nas configurações salvas (Master Data)
     config_items = []
     if not df_configs.empty:
         tipo_config = f"Config_{coluna}"
         if coluna in df_configs.columns:
             config_items = df_configs[df_configs["Tipo"] == tipo_config][coluna].dropna().astype(str).unique().tolist()
     
-    # 2. Procura lançamentos legados
     existentes = []
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
@@ -193,7 +188,8 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     return sorted(list(set(base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
 
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
-LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP"]
+# 🔥 BANCOS ATUALIZADOS COM CARTEIRAS DIGITAIS (PIX) 🔥
+LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "PicPay", "99Pay", "Mercado Pago"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
 def gerar_pdf(df_mes, mes_selecionado):
@@ -224,7 +220,7 @@ def gerar_pdf(df_mes, mes_selecionado):
     return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER E TABS
+# 5. HEADER E TABS UNIFICADAS
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -236,8 +232,8 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-# 🔥 NOVA ABA "CADASTROS" ADICIONADA AQUI 🔥
-aba_dashboard, aba_lancamentos, aba_cartoes, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "💳 Cartões", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
+# A ABA DE CARTÕES FOI REMOVIDA DAQUI E INCORPORADA NOS CADASTROS!
+aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
 
 # ========================================================
 # 6. DASHBOARD
@@ -363,8 +359,6 @@ with aba_dashboard:
 # ========================================================
 # 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
-
-# Função Invisível para Auto-Salvar novas categorias digitadas
 def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
     nova_linha = {
         "user_email": st.session_state.user_email,
@@ -412,7 +406,7 @@ with aba_lancamentos:
                 opcoes_conta_final = opcoes_conta_padrao + lista_cartoes_registrados + ["➕ Cadastrar Novo Fora da Lista..."]
                 
                 conta_sel = st.selectbox("Conta / Cartão", opcoes_conta_final)
-                conta_cartao = st.text_input("Nome da Nova Conta (Ou vá na aba 'Meus Cartões'):") if conta_sel == "➕ Cadastrar Novo Fora da Lista..." else conta_sel
+                conta_cartao = st.text_input("Nome da Nova Conta (Ou vá na aba 'Cadastros'):") if conta_sel == "➕ Cadastrar Novo Fora da Lista..." else conta_sel
             with c6:
                 opcoes_orig = obter_opcoes("Origem_Destino", ["Supermercado", "Pix", "Empresa"]) + ["➕ Nova Origem/Destino..."]
                 orig_sel = st.selectbox("Origem / Destino", opcoes_orig)
@@ -469,7 +463,6 @@ with aba_lancamentos:
         if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and conta_cartao and responsavel:
                 
-                # O NINJA INVISÍVEL: Salva os cadastros novos para não perder nunca mais
                 if cat_sel == "➕ Nova Categoria..." and categoria: auto_salvar_cadastro("Categoria", categoria)
                 if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
                 if resp_sel == "➕ Novo Responsável..." and responsavel: auto_salvar_cadastro("Responsavel", responsavel)
@@ -677,168 +670,168 @@ with aba_lancamentos:
                         else: st.warning("Selecione algum item primeiro.")
 
 # ========================================================
-# 8. ABA DE GERENCIAMENTO DE CARTÕES
-# ========================================================
-with aba_cartoes:
-    st.markdown("### 💳 Gerenciador de Cartões e Contas")
-    st.write("Cadastre aqui os seus cartões de crédito para selecioná-los rapidamente na hora de lançar uma despesa. O sistema saberá exatamente em que dia do mês a sua fatura vence!")
-    
-    with st.container(border=True):
-        st.markdown("#### Adicionar Novo Cartão")
-        c1, c2, c3 = st.columns(3)
-        with c1: 
-            bancos_cadastrados = df_cartoes["Categoria"].dropna().unique().tolist() if not df_cartoes.empty else []
-            lista_bancos_atualizada = sorted(list(set(LISTA_BANCOS + bancos_cadastrados)))
-            opcoes_banco = lista_bancos_atualizada + ["➕ Outro Banco..."]
-            
-            banco_sel = st.selectbox("Banco / Emissor", opcoes_banco)
-            
-            if banco_sel == "➕ Outro Banco...":
-                banco_cartao = st.text_input("Digite o nome do Banco / Emissor:")
-            else:
-                banco_cartao = banco_sel
-                
-        with c2: 
-            final_cartao = st.text_input("Nome Rápido ou 4 Últimos Dígitos (Ex: 1234)", max_chars=15)
-        with c3: 
-            dia_vencimento = st.number_input("Dia de Vencimento da Fatura", min_value=1, max_value=31, value=10)
-            
-        if st.button("💾 Salvar Cartão no Sistema", type="primary"):
-            if final_cartao.strip() != "" and banco_cartao.strip() != "":
-                nova_linha_cartao = {
-                    "user_email": st.session_state.user_email,
-                    "data_compra": datetime.now().strftime("%Y-%m-%d"),
-                    "competencia": datetime.now().strftime("%Y-%m"),
-                    "tipo": "Config_Cartao",
-                    "categoria": banco_cartao,
-                    "subcategoria": final_cartao,
-                    "conta_cartao": f"{banco_cartao} - Final {final_cartao} (Venc: dia {dia_vencimento})",
-                    "valor": float(dia_vencimento),
-                    "descricao": "Configuração de Cartão",
-                    "responsavel": st.session_state.user_nome,
-                    "status": "Pago"
-                }
-                try:
-                    supabase.table("lancamentos").insert(nova_linha_cartao).execute()
-                    st.success("Cartão registado! Agora ele aparecerá nas opções de Lançamento e de Banco.")
-                    time.sleep(1.5)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar cartão: {e}")
-            else:
-                st.warning("Por favor, preencha o nome do banco e os últimos dígitos.")
-
-    st.markdown("---")
-    st.markdown("#### Seus Cartões Registados")
-    if not df_cartoes.empty:
-        df_cartoes_view = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].copy()
-        df_cartoes_view = df_cartoes_view.rename(columns={"Conta_Cartao": "Nome do Cartão no Sistema", "Categoria": "Banco", "Valor": "Dia de Vencimento"})
-        
-        st.dataframe(df_cartoes_view.drop(columns=["ID"]), use_container_width=True, hide_index=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.write("Deseja apagar algum cartão?")
-        cartao_para_apagar = st.selectbox("Selecione o cartão que deseja remover:", df_cartoes_view["Nome do Cartão no Sistema"].tolist())
-        if st.button("🗑️ Remover Cartão Selecionado"):
-            id_para_remover = df_cartoes[df_cartoes["Conta_Cartao"] == cartao_para_apagar]["ID"].iloc[0]
-            try:
-                supabase.table("lancamentos").delete().eq("id", id_para_remover).execute()
-                st.success("Cartão removido da sua lista!")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao remover: {e}")
-    else:
-        st.info("Ainda não tens nenhum cartão cadastrado. Usa o formulário acima para adicionar o primeiro!")
-
-# ========================================================
-# 9. NOVA ABA: CENTRAL DE CADASTROS (MASTER DATA)
+# 8. SUPER CENTRAL DE CADASTROS (UNIFICADA)
 # ========================================================
 with aba_cadastros:
-    st.markdown("### ⚙️ Central de Cadastros e Edição Global")
-    st.write("Gerencie as listas que aparecem nos formulários. Renomear um item aqui atualiza automaticamente **todos** os lançamentos passados que o utilizavam!")
+    st.markdown("### ⚙️ Central Única de Cadastros e Configurações")
+    st.write("Gerencie absolutamente tudo por aqui: as suas listas de classificação, contas, cartões e carteiras digitais.")
     
     col_dict = {
+        "Contas, Cartões e Carteiras Digitais": "Cartao",
         "Categoria": "Categoria",
         "Subcategoria": "Subcategoria",
         "Responsável": "Responsavel",
         "Origem/Destino": "Origem_Destino"
     }
     
-    tipo_cadastro = st.selectbox("Qual lista deseja gerenciar?", list(col_dict.keys()))
+    tipo_cadastro = st.selectbox("O que você deseja configurar ou gerenciar agora?", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
     
-    opcoes_atuais = obter_opcoes(col_db, [])
-    
-    c_cad1, c_cad2 = st.columns(2)
-    
-    with c_cad1:
+    # --------------------------------------------------------
+    # 8.1 - LÓGICA EXCLUSIVA PARA CARTÕES E CONTAS BANCÁRIAS
+    # --------------------------------------------------------
+    if col_db == "Cartao":
         with st.container(border=True):
-            st.markdown(f"#### ➕ Adicionar {tipo_cadastro}")
-            novo_item = st.text_input(f"Nome do(a) novo(a) {tipo_cadastro}")
-            
-            cat_vinculo = ""
-            if tipo_cadastro == "Subcategoria":
-                cat_vinculo = st.selectbox("Pertence a qual Categoria?", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+            st.markdown("#### 💳 Adicionar Nova Conta ou Cartão")
+            c1, c2, c3 = st.columns(3)
+            with c1: 
+                bancos_cadastrados = df_cartoes["Categoria"].dropna().unique().tolist() if not df_cartoes.empty else []
+                lista_bancos_atualizada = sorted(list(set(LISTA_BANCOS + bancos_cadastrados)))
+                opcoes_banco = lista_bancos_atualizada + ["➕ Outro Banco..."]
                 
-            if st.button("Salvar Cadastro"):
-                if novo_item.strip() != "":
-                    auto_salvar_cadastro(col_db, novo_item.strip(), cat_vinculo)
-                    st.success(f"{novo_item} adicionado com sucesso!")
+                banco_sel = st.selectbox("Banco / Emissor", opcoes_banco)
+                
+                if banco_sel == "➕ Outro Banco...":
+                    banco_cartao = st.text_input("Digite o nome do Banco / Emissor:")
+                else:
+                    banco_cartao = banco_sel
+                    
+            with c2: 
+                final_cartao = st.text_input("Nome Rápido ou 4 Últimos Dígitos (Ex: 1234)", max_chars=15)
+            with c3: 
+                dia_vencimento = st.number_input("Dia de Vencimento da Fatura", min_value=1, max_value=31, value=10)
+                
+            if st.button("💾 Salvar Cartão no Sistema", type="primary"):
+                if final_cartao.strip() != "" and banco_cartao.strip() != "":
+                    nova_linha_cartao = {
+                        "user_email": st.session_state.user_email,
+                        "data_compra": datetime.now().strftime("%Y-%m-%d"),
+                        "competencia": datetime.now().strftime("%Y-%m"),
+                        "tipo": "Config_Cartao",
+                        "categoria": banco_cartao,
+                        "subcategoria": final_cartao,
+                        "conta_cartao": f"{banco_cartao} - Final {final_cartao} (Venc: dia {dia_vencimento})",
+                        "valor": float(dia_vencimento),
+                        "descricao": "Configuração de Cartão",
+                        "responsavel": st.session_state.user_nome,
+                        "status": "Pago"
+                    }
+                    try:
+                        supabase.table("lancamentos").insert(nova_linha_cartao).execute()
+                        st.success("Conta/Cartão registado! Agora ele aparecerá nas opções de Lançamento.")
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar cartão: {e}")
+                else:
+                    st.warning("Por favor, preencha o nome do banco e os últimos dígitos.")
+
+        st.markdown("---")
+        st.markdown("#### Suas Contas e Cartões Registados")
+        if not df_cartoes.empty:
+            df_cartoes_view = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].copy()
+            df_cartoes_view = df_cartoes_view.rename(columns={"Conta_Cartao": "Nome da Conta no Sistema", "Categoria": "Banco", "Valor": "Dia de Vencimento"})
+            
+            st.dataframe(df_cartoes_view.drop(columns=["ID"]), use_container_width=True, hide_index=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.write("Deseja apagar alguma conta ou cartão?")
+            cartao_para_apagar = st.selectbox("Selecione a conta que deseja remover:", df_cartoes_view["Nome da Conta no Sistema"].tolist())
+            if st.button("🗑️ Remover Conta Selecionada"):
+                id_para_remover = df_cartoes[df_cartoes["Conta_Cartao"] == cartao_para_apagar]["ID"].iloc[0]
+                try:
+                    supabase.table("lancamentos").delete().eq("id", id_para_remover).execute()
+                    st.success("Removido da sua lista com sucesso!")
                     time.sleep(1)
                     st.rerun()
-                else:
-                    st.warning("Preencha o nome do item.")
-                    
-    with c_cad2:
-        with st.container(border=True):
-            st.markdown(f"#### ✏️ Renomear {tipo_cadastro} (Atualização Global)")
-            st.info("⚠️ Ao renomear, todo o seu histórico será atualizado com o novo nome.")
-            
-            if opcoes_atuais:
-                item_para_editar = st.selectbox(f"Selecione o(a) {tipo_cadastro} para renomear:", opcoes_atuais)
-                novo_nome_item = st.text_input("Novo Nome:")
-                
-                if st.button("Renomear em todo o sistema", type="primary"):
-                    if novo_nome_item.strip() != "" and item_para_editar != novo_nome_item:
-                        try:
-                            # A mágica da Edição em Cascata: Atualiza as configurações e os lançamentos reais de uma só vez!
-                            supabase.table("lancamentos").update({col_db.lower(): novo_nome_item.strip()}).eq("user_email", st.session_state.user_email).eq(col_db.lower(), item_para_editar).execute()
-                            st.success("Histórico inteiro atualizado com o novo nome!")
-                            time.sleep(1.5)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao renomear: {e}")
-                    else:
-                        st.warning("Digite um nome diferente para renomear.")
-            else:
-                st.write("Nenhum item encontrado nesta categoria.")
-                
-    st.markdown("---")
-    st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
-    st.write("Apagar um item daqui **NÃO apaga os seus lançamentos financeiros antigos**. Apenas remove o nome da lista de opções de novos lançamentos.")
-    
-    itens_salvos_config = df_configs[df_configs["Tipo"] == f"Config_{col_db}"]
-    if not itens_salvos_config.empty:
-        coluna_busca = "subcategoria" if col_db == "Subcategoria" else col_db.lower()
-        lista_excluir = itens_salvos_config[coluna_busca.capitalize()].dropna().astype(str).unique().tolist()
-        
-        item_apagar = st.selectbox(f"Selecione o(a) {tipo_cadastro} que deseja remover da lista:", lista_excluir)
-        if st.button("Remover da Lista"):
-            try:
-                # Exclui apenas a linha de configuração, protegendo o histórico
-                id_config = itens_salvos_config[itens_salvos_config[coluna_busca.capitalize()] == item_apagar]["ID"].iloc[0]
-                supabase.table("lancamentos").delete().eq("id", id_config).execute()
-                st.success(f"{item_apagar} removido da sua lista base.")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao remover: {e}")
+                except Exception as e:
+                    st.error(f"Erro ao remover: {e}")
+        else:
+            st.info("Ainda não tens nenhuma conta ou cartão cadastrado.")
+
+    # --------------------------------------------------------
+    # 8.2 - LÓGICA PADRÃO PARA MASTER DATA (CATEGORIAS, RESPONSÁVEIS)
+    # --------------------------------------------------------
     else:
-        st.info(f"Não há itens de {tipo_cadastro} salvos manualmente na Central de Cadastros no momento.")
+        opcoes_atuais = obter_opcoes(col_db, [])
+        
+        c_cad1, c_cad2 = st.columns(2)
+        
+        with c_cad1:
+            with st.container(border=True):
+                st.markdown(f"#### ➕ Adicionar {tipo_cadastro}")
+                novo_item = st.text_input(f"Nome do(a) novo(a) {tipo_cadastro}")
+                
+                cat_vinculo = ""
+                if tipo_cadastro == "Subcategoria":
+                    cat_vinculo = st.selectbox("Pertence a qual Categoria?", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+                    
+                if st.button("Salvar Cadastro"):
+                    if novo_item.strip() != "":
+                        auto_salvar_cadastro(col_db, novo_item.strip(), cat_vinculo)
+                        st.success(f"{novo_item} adicionado com sucesso!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("Preencha o nome do item.")
+                        
+        with c_cad2:
+            with st.container(border=True):
+                st.markdown(f"#### ✏️ Renomear {tipo_cadastro} (Atualização Global)")
+                st.info("⚠️ Ao renomear, todo o seu histórico será atualizado com o novo nome.")
+                
+                if opcoes_atuais:
+                    item_para_editar = st.selectbox(f"Selecione o(a) {tipo_cadastro} para renomear:", opcoes_atuais)
+                    novo_nome_item = st.text_input("Novo Nome:")
+                    
+                    if st.button("Renomear em todo o sistema", type="primary"):
+                        if novo_nome_item.strip() != "" and item_para_editar != novo_nome_item:
+                            try:
+                                supabase.table("lancamentos").update({col_db.lower(): novo_nome_item.strip()}).eq("user_email", st.session_state.user_email).eq(col_db.lower(), item_para_editar).execute()
+                                st.success("Histórico inteiro atualizado com o novo nome!")
+                                time.sleep(1.5)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao renomear: {e}")
+                        else:
+                            st.warning("Digite um nome diferente para renomear.")
+                else:
+                    st.write("Nenhum item encontrado nesta categoria.")
+                    
+        st.markdown("---")
+        st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
+        st.write("Apagar um item daqui **NÃO apaga os seus lançamentos financeiros antigos**. Apenas remove o nome da lista de opções de novos lançamentos.")
+        
+        itens_salvos_config = df_configs[df_configs["Tipo"] == f"Config_{col_db}"]
+        if not itens_salvos_config.empty:
+            coluna_busca = "subcategoria" if col_db == "Subcategoria" else col_db.lower()
+            lista_excluir = itens_salvos_config[coluna_busca.capitalize()].dropna().astype(str).unique().tolist()
+            
+            item_apagar = st.selectbox(f"Selecione o(a) {tipo_cadastro} que deseja remover da lista:", lista_excluir)
+            if st.button("Remover da Lista"):
+                try:
+                    id_config = itens_salvos_config[itens_salvos_config[coluna_busca.capitalize()] == item_apagar]["ID"].iloc[0]
+                    supabase.table("lancamentos").delete().eq("id", id_config).execute()
+                    st.success(f"{item_apagar} removido da sua lista base.")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao remover: {e}")
+        else:
+            st.info(f"Não há itens de {tipo_cadastro} salvos manualmente na Central de Cadastros no momento.")
 
 # ========================================================
-# 10. ASSISTENTE IA 
+# 9. ASSISTENTE IA 
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
@@ -865,7 +858,7 @@ with aba_assistente:
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 11. OPEN FINANCE
+# 10. OPEN FINANCE
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
