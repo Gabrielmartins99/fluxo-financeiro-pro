@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -122,7 +122,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E DIVISÃO DE DADOS (CARTÕES VS LANÇAMENTOS)
+# 4. FUNÇÕES BASE E NOVO MOTOR DE CADASTROS (MASTER DATA)
 # ========================================================
 def carregar_dados_completos():
     try:
@@ -149,16 +149,30 @@ def carregar_dados_completos():
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-# Separação inteligente dos dados
+# 🔥 O SISTEMA AGORA SEPARA TUDO QUE É CONFIGURAÇÃO DO QUE É LANÇAMENTO REAL 🔥
 df_tudo = carregar_dados_completos()
-df_cartoes = df_tudo[df_tudo["Tipo"] == "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
-df = df_tudo[df_tudo["Tipo"] != "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
+# Filtra todas as linhas onde o Tipo começa com "Config_" (Cartões, Categorias, etc)
+df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
+# Filtra apenas transações reais para alimentar o Dashboard
+df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 
+df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
+
+# Motor inteligente que junta Cadastros Salvos + Padrão + Lançamentos Antigos
 def obter_opcoes(coluna, lista_base):
+    # 1. Procura nas configurações salvas (Master Data)
+    config_items = []
+    if not df_configs.empty:
+        tipo_config = f"Config_{coluna}"
+        if coluna in df_configs.columns:
+            config_items = df_configs[df_configs["Tipo"] == tipo_config][coluna].dropna().astype(str).unique().tolist()
+    
+    # 2. Procura lançamentos legados
+    existentes = []
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
-        return sorted(list(set(lista_base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
-    return sorted(lista_base)
+        
+    return sorted(list(set(lista_base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
 
 def obter_subcategorias_dinamicas(categoria_alvo):
     base = []
@@ -168,10 +182,15 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     elif categoria_alvo == "Salário": base = ["Salário Fixo", "Comissão", "Bonificação", "13º"]
     else: base = ["Geral"]
     
+    config_items = []
+    if not df_configs.empty:
+        config_items = df_configs[(df_configs["Tipo"] == "Config_Subcategoria") & (df_configs["Categoria"] == categoria_alvo)]["Subcategoria"].dropna().astype(str).unique().tolist()
+        
+    existentes = []
     if not df.empty and "Subcategoria" in df.columns and "Categoria" in df.columns:
         existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist()
-        return sorted(list(set(base + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
-    return sorted(base)
+        
+    return sorted(list(set(base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
 
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP"]
@@ -217,7 +236,8 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_cartoes, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "💳 Meus Cartões", "🤖 Assistente IA", "🔌 Open Finance"])
+# 🔥 NOVA ABA "CADASTROS" ADICIONADA AQUI 🔥
+aba_dashboard, aba_lancamentos, aba_cartoes, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "💳 Cartões", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
 
 # ========================================================
 # 6. DASHBOARD
@@ -343,6 +363,26 @@ with aba_dashboard:
 # ========================================================
 # 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
+
+# Função Invisível para Auto-Salvar novas categorias digitadas
+def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
+    nova_linha = {
+        "user_email": st.session_state.user_email,
+        "data_compra": datetime.now().strftime("%Y-%m-%d"),
+        "competencia": datetime.now().strftime("%Y-%m"),
+        "tipo": f"Config_{tipo_cad}",
+        "categoria": valor if tipo_cad == "Categoria" else (vinculada if tipo_cad == "Subcategoria" else ""),
+        "subcategoria": valor if tipo_cad == "Subcategoria" else "",
+        "responsavel": valor if tipo_cad == "Responsavel" else "",
+        "origem_destino": valor if tipo_cad == "Origem_Destino" else "",
+        "conta_cartao": "",
+        "valor": 0.0,
+        "descricao": f"Cadastro Automático",
+        "parcela": "-",
+        "status": "Config"
+    }
+    supabase.table("lancamentos").insert(nova_linha).execute()
+
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
     
@@ -428,6 +468,13 @@ with aba_lancamentos:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and conta_cartao and responsavel:
+                
+                # O NINJA INVISÍVEL: Salva os cadastros novos para não perder nunca mais
+                if cat_sel == "➕ Nova Categoria..." and categoria: auto_salvar_cadastro("Categoria", categoria)
+                if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                if resp_sel == "➕ Novo Responsável..." and responsavel: auto_salvar_cadastro("Responsavel", responsavel)
+                if orig_sel == "➕ Nova Origem/Destino..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
+                
                 novas_linhas = []
                 start_year = ano_comp
                 start_month = int(mes_num)
@@ -640,7 +687,6 @@ with aba_cartoes:
         st.markdown("#### Adicionar Novo Cartão")
         c1, c2, c3 = st.columns(3)
         with c1: 
-            # 🔥 O CAMPO DE BANCO AGORA É DINÂMICO! 🔥
             bancos_cadastrados = df_cartoes["Categoria"].dropna().unique().tolist() if not df_cartoes.empty else []
             lista_bancos_atualizada = sorted(list(set(LISTA_BANCOS + bancos_cadastrados)))
             opcoes_banco = lista_bancos_atualizada + ["➕ Outro Banco..."]
@@ -706,7 +752,93 @@ with aba_cartoes:
         st.info("Ainda não tens nenhum cartão cadastrado. Usa o formulário acima para adicionar o primeiro!")
 
 # ========================================================
-# 9. ASSISTENTE IA 
+# 9. NOVA ABA: CENTRAL DE CADASTROS (MASTER DATA)
+# ========================================================
+with aba_cadastros:
+    st.markdown("### ⚙️ Central de Cadastros e Edição Global")
+    st.write("Gerencie as listas que aparecem nos formulários. Renomear um item aqui atualiza automaticamente **todos** os lançamentos passados que o utilizavam!")
+    
+    col_dict = {
+        "Categoria": "Categoria",
+        "Subcategoria": "Subcategoria",
+        "Responsável": "Responsavel",
+        "Origem/Destino": "Origem_Destino"
+    }
+    
+    tipo_cadastro = st.selectbox("Qual lista deseja gerenciar?", list(col_dict.keys()))
+    col_db = col_dict[tipo_cadastro]
+    
+    opcoes_atuais = obter_opcoes(col_db, [])
+    
+    c_cad1, c_cad2 = st.columns(2)
+    
+    with c_cad1:
+        with st.container(border=True):
+            st.markdown(f"#### ➕ Adicionar {tipo_cadastro}")
+            novo_item = st.text_input(f"Nome do(a) novo(a) {tipo_cadastro}")
+            
+            cat_vinculo = ""
+            if tipo_cadastro == "Subcategoria":
+                cat_vinculo = st.selectbox("Pertence a qual Categoria?", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+                
+            if st.button("Salvar Cadastro"):
+                if novo_item.strip() != "":
+                    auto_salvar_cadastro(col_db, novo_item.strip(), cat_vinculo)
+                    st.success(f"{novo_item} adicionado com sucesso!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("Preencha o nome do item.")
+                    
+    with c_cad2:
+        with st.container(border=True):
+            st.markdown(f"#### ✏️ Renomear {tipo_cadastro} (Atualização Global)")
+            st.info("⚠️ Ao renomear, todo o seu histórico será atualizado com o novo nome.")
+            
+            if opcoes_atuais:
+                item_para_editar = st.selectbox(f"Selecione o(a) {tipo_cadastro} para renomear:", opcoes_atuais)
+                novo_nome_item = st.text_input("Novo Nome:")
+                
+                if st.button("Renomear em todo o sistema", type="primary"):
+                    if novo_nome_item.strip() != "" and item_para_editar != novo_nome_item:
+                        try:
+                            # A mágica da Edição em Cascata: Atualiza as configurações e os lançamentos reais de uma só vez!
+                            supabase.table("lancamentos").update({col_db.lower(): novo_nome_item.strip()}).eq("user_email", st.session_state.user_email).eq(col_db.lower(), item_para_editar).execute()
+                            st.success("Histórico inteiro atualizado com o novo nome!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao renomear: {e}")
+                    else:
+                        st.warning("Digite um nome diferente para renomear.")
+            else:
+                st.write("Nenhum item encontrado nesta categoria.")
+                
+    st.markdown("---")
+    st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
+    st.write("Apagar um item daqui **NÃO apaga os seus lançamentos financeiros antigos**. Apenas remove o nome da lista de opções de novos lançamentos.")
+    
+    itens_salvos_config = df_configs[df_configs["Tipo"] == f"Config_{col_db}"]
+    if not itens_salvos_config.empty:
+        coluna_busca = "subcategoria" if col_db == "Subcategoria" else col_db.lower()
+        lista_excluir = itens_salvos_config[coluna_busca.capitalize()].dropna().astype(str).unique().tolist()
+        
+        item_apagar = st.selectbox(f"Selecione o(a) {tipo_cadastro} que deseja remover da lista:", lista_excluir)
+        if st.button("Remover da Lista"):
+            try:
+                # Exclui apenas a linha de configuração, protegendo o histórico
+                id_config = itens_salvos_config[itens_salvos_config[coluna_busca.capitalize()] == item_apagar]["ID"].iloc[0]
+                supabase.table("lancamentos").delete().eq("id", id_config).execute()
+                st.success(f"{item_apagar} removido da sua lista base.")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao remover: {e}")
+    else:
+        st.info(f"Não há itens de {tipo_cadastro} salvos manualmente na Central de Cadastros no momento.")
+
+# ========================================================
+# 10. ASSISTENTE IA 
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
@@ -733,7 +865,7 @@ with aba_assistente:
                     except Exception as e: st.error(f"Erro de IA: {e}")
 
 # ========================================================
-# 10. OPEN FINANCE
+# 11. OPEN FINANCE
 # ========================================================
 with aba_openfinance:
     st.subheader("🔌 Hub de Integração Bancária")
