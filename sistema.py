@@ -338,7 +338,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM FUNÇÃO DE SELECIONAR TUDO)
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -487,9 +487,6 @@ with aba_lancamentos:
         else:
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             
-            # 🔥 ATUALIZAÇÃO: A coluna agora chama-se "Selecionar" para permitir múltiplas ações 🔥
-            df_view.insert(0, "Selecionar", False)
-            
             st.markdown("#### 🔍 Filtros de Busca")
             c_f1, c_f2, c_f3, c_f4 = st.columns(4)
             with c_f1:
@@ -517,7 +514,13 @@ with aba_lancamentos:
             if filtro_status != "Todos":
                 df_view = df_view[df_view["Status"] == filtro_status]
             
-            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Marque a caixinha **'Selecionar'** nos itens desejados e use os botões abaixo para alterar tudo de uma vez!")
+            st.markdown("---")
+            
+            # 🔥 NOVA FUNCIONALIDADE: SELECIONAR TUDO 🔥
+            selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos filtrados abaixo", value=False)
+            df_view.insert(0, "Selecionar", selecionar_tudo)
+            
+            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Marque a caixinha acima para selecionar todos de uma vez, ou escolha itens individuais na tabela para usar os botões de Ações Rápidas.")
             
             df_resultado = st.data_editor(
                 df_view, 
@@ -526,14 +529,12 @@ with aba_lancamentos:
                 disabled=["ID"] 
             )
             
-            # Pega todos os IDs que você marcou na caixinha "Selecionar"
             ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
             
             st.markdown("#### ⚡ Ações Rápidas (Para os itens selecionados)")
             c_op1, c_op2, c_op3, c_op4 = st.columns(4)
             
             with c_op1:
-                # O botão antigo de salvamento manual continua aqui
                 if st.button("💾 Salvar Edições Manuais", type="primary", use_container_width=True):
                     try:
                         mudancas_realizadas = 0
@@ -541,7 +542,6 @@ with aba_lancamentos:
                             row_editada = df_resultado.iloc[idx]
                             row_original = df_view.iloc[idx]
                             
-                            # Verifica se você editou textos ou valores manualmente
                             if (str(row_editada["Data"]) != str(row_original["Data"]) or
                                 float(row_editada["Valor"]) != float(row_original["Valor"]) or
                                 str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
@@ -578,12 +578,10 @@ with aba_lancamentos:
                     except Exception as e:
                         st.error(f"Erro ao salvar edições: {e}")
 
-            # 🔥 OS NOVOS SUPER BOTÕES DE AUTOMAÇÃO 🔥
             with c_op2:
                 if st.button("✅ Marcar como Pago", use_container_width=True):
                     if ids_selecionados:
                         try:
-                            # Uma única chamada poderosa ao banco para atualizar todos de uma vez
                             supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
                             st.success("Tudo atualizado para Pago!")
                             time.sleep(1)
