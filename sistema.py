@@ -129,6 +129,7 @@ def carregar_dados_completos():
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df_total = pd.DataFrame(response.data)
+            # Os nomes das colunas são padronizados com iniciais maiúsculas
             df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df_total["Valor"] = pd.to_numeric(df_total["Valor"]).fillna(0.0)
             if "Origem_Destino" in df_total.columns: df_total["Origem_Destino"] = df_total["Origem_Destino"].fillna("")
@@ -153,10 +154,9 @@ def carregar_dados_completos():
 df_tudo = carregar_dados_completos()
 
 # Os cartões ficam guardados com a etiqueta especial "Config_Cartao"
-df_cartoes = df_tudo[df_tudo["Tipo"] == "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame()
-# O Dashboard e os relatórios só veem os lançamentos reais (escondendo as configurações de cartão)
+df_cartoes = df_tudo[df_tudo["Tipo"] == "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
+# O Dashboard e os relatórios só veem os lançamentos reais
 df = df_tudo[df_tudo["Tipo"] != "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
-
 
 def obter_opcoes(coluna, lista_base):
     if not df.empty and coluna in df.columns:
@@ -221,7 +221,6 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-# 🔥 NOVA ABA "CARTÕES" ADICIONADA AQUI 🔥
 aba_dashboard, aba_lancamentos, aba_cartoes, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "💳 Meus Cartões", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
@@ -372,7 +371,6 @@ with aba_lancamentos:
                 subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
                 subcategoria = st.text_input("Nome da Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
             with c5:
-                # 🔥 INTEGRAÇÃO COM OS CARTÕES CADASTRADOS 🔥
                 lista_cartoes_registrados = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
                 opcoes_conta_padrao = ["Conta Corrente / Pix", "Dinheiro Físico"]
                 opcoes_conta_final = opcoes_conta_padrao + lista_cartoes_registrados + ["➕ Cadastrar Novo Fora da Lista..."]
@@ -636,7 +634,7 @@ with aba_lancamentos:
                         else: st.warning("Selecione algum item primeiro.")
 
 # ========================================================
-# 8. ABA DE GERENCIAMENTO DE CARTÕES (NOVA)
+# 8. ABA DE GERENCIAMENTO DE CARTÕES (COM CORREÇÃO DE CASE SENSITIVE)
 # ========================================================
 with aba_cartoes:
     st.markdown("### 💳 Gerenciador de Cartões e Contas")
@@ -680,8 +678,9 @@ with aba_cartoes:
     st.markdown("---")
     st.markdown("#### Seus Cartões Registados")
     if not df_cartoes.empty:
-        df_cartoes_view = df_cartoes[["ID", "conta_cartao", "categoria", "valor"]].copy()
-        df_cartoes_view = df_cartoes_view.rename(columns={"conta_cartao": "Nome do Cartão no Sistema", "categoria": "Banco", "valor": "Dia de Vencimento"})
+        # CORREÇÃO CRÍTICA APLICADA AQUI: Letras maiúsculas exatas conforme definidas na base de dados
+        df_cartoes_view = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].copy()
+        df_cartoes_view = df_cartoes_view.rename(columns={"Conta_Cartao": "Nome do Cartão no Sistema", "Categoria": "Banco", "Valor": "Dia de Vencimento"})
         
         st.dataframe(df_cartoes_view.drop(columns=["ID"]), use_container_width=True, hide_index=True)
         
@@ -689,7 +688,7 @@ with aba_cartoes:
         st.write("Deseja apagar algum cartão?")
         cartao_para_apagar = st.selectbox("Selecione o cartão que deseja remover:", df_cartoes_view["Nome do Cartão no Sistema"].tolist())
         if st.button("🗑️ Remover Cartão Selecionado"):
-            id_para_remover = df_cartoes[df_cartoes["conta_cartao"] == cartao_para_apagar]["ID"].iloc[0]
+            id_para_remover = df_cartoes[df_cartoes["Conta_Cartao"] == cartao_para_apagar]["ID"].iloc[0]
             try:
                 supabase.table("lancamentos").delete().eq("id", id_para_remover).execute()
                 st.success("Cartão removido da sua lista!")
