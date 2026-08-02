@@ -26,9 +26,11 @@ def init_connection():
 
 supabase: Client = init_connection()
 
+# 🔥 CORREÇÃO DA IA: Usando o nome de batismo atualizado do Google 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+    # Trocamos para 'gemini-1.5-flash-latest' para garantir compatibilidade com a API atual
+    modelo_ia = genai.GenerativeModel('gemini-1.5-flash-latest')
 else:
     modelo_ia = None
 
@@ -52,7 +54,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -124,8 +126,6 @@ if not st.session_state.user_email:
 # ========================================================
 # 4. FUNÇÕES BASE E LISTA NEGRA (BLACKLIST)
 # ========================================================
-
-# 🔥 LISTAS BASES DEFINIDAS GLOBALMENTE 🔥
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa", "Usuário"]
 LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "PicPay", "99Pay", "Mercado Pago"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
@@ -164,19 +164,16 @@ df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.e
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
 def obter_opcoes(coluna, lista_base):
-    # Cadastros Manuais
     config_items = []
     if not df_configs.empty:
         tipo_config = f"Config_{coluna}"
         if coluna in df_configs.columns:
             config_items = df_configs[df_configs["Tipo"] == tipo_config][coluna].dropna().astype(str).unique().tolist()
     
-    # Cadastros Legados (Histórico)
     existentes = []
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
         
-    # Itens Excluídos (Lista Negra)
     ocultos = []
     if not df_configs.empty:
         ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist()
@@ -778,15 +775,13 @@ with aba_cadastros:
     # 8.2 - LÓGICA MESTRA PARA CADASTROS (COM BLACKLIST)
     # --------------------------------------------------------
     else:
-        # Define a lista base dependendo da escolha
         if col_db == "Categoria": lista_base_atual = LISTA_CATEGORIAS
         elif col_db == "Responsavel": lista_base_atual = LISTA_RESPONSAVEIS_BASE
         elif col_db == "Origem_Destino": lista_base_atual = LISTA_ORIGEM_BASE
         elif col_db == "Subcategoria": lista_base_atual = SUBCATS_BASE
         
-        # O sistema agora puxa absolutamente TODAS as opções visíveis
         if col_db == "Subcategoria":
-            opcoes_atuais = obter_subcategorias_dinamicas("TODAS") # Usa a função que consolida todas
+            opcoes_atuais = obter_subcategorias_dinamicas("TODAS") 
         else:
             opcoes_atuais = obter_opcoes(col_db, lista_base_atual)
         
@@ -825,10 +820,8 @@ with aba_cadastros:
                                 col_real = col_db.lower()
                                 if col_db == "Origem_Destino": col_real = "origem_destino"
                                 
-                                # 1. Atualiza todo o histórico existente
                                 supabase.table("lancamentos").update({col_real: novo_nome_item.strip()}).eq("user_email", st.session_state.user_email).eq(col_real, item_para_editar).execute()
                                 
-                                # 2. Joga a palavra antiga na Lista Negra para não voltar como Padrão
                                 nova_linha_oculta = {
                                     "user_email": st.session_state.user_email,
                                     "data_compra": datetime.now().strftime("%Y-%m-%d"),
@@ -846,7 +839,6 @@ with aba_cadastros:
                                 }
                                 supabase.table("lancamentos").insert(nova_linha_oculta).execute()
                                 
-                                # 3. Salva a nova palavra como Cadastro Customizado
                                 auto_salvar_cadastro(col_db, novo_nome_item.strip(), "")
                                 
                                 st.success("Histórico inteiro atualizado com o novo nome!")
@@ -861,18 +853,15 @@ with aba_cadastros:
                     
         st.markdown("---")
         
-        # 🔥 A NOVA SEÇÃO DE LISTA NEGRA (EXCLUSÃO DE PADRÕES E LEGADOS) 🔥
         st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
         st.write("Diga adeus a qualquer item da lista (mesmo os padrões do sistema). Isso esconderá a opção de futuros lançamentos, mas não apagará o seu histórico financeiro passado.")
         
-        # Agora ele permite excluir QUALQUER coisa que esteja ativa no sistema
         lista_excluir = opcoes_atuais 
         
         if lista_excluir:
             item_apagar = st.selectbox(f"Selecione o(a) {tipo_cadastro} que deseja remover da lista:", lista_excluir)
             if st.button("Remover da Lista"):
                 try:
-                    # 1. Se era um cadastro customizado, tenta apagá-lo fisicamente
                     col_real = col_db
                     itens_salvos_config = df_configs[(df_configs["Tipo"] == f"Config_{col_db}")]
                     if col_db == "Subcategoria":
@@ -884,7 +873,6 @@ with aba_cadastros:
                         id_config = itens_salvos_config["ID"].iloc[0]
                         supabase.table("lancamentos").delete().eq("id", id_config).execute()
                     
-                    # 2. Insere na Lista Negra (Blacklist) para bloquear itens Padrões ou de Histórico antigo
                     nova_linha_oculta = {
                         "user_email": st.session_state.user_email,
                         "data_compra": datetime.now().strftime("%Y-%m-%d"),
