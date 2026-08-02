@@ -122,7 +122,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E NOVO MOTOR DE CADASTROS (MASTER DATA)
+# 4. FUNÇÕES BASE E LISTA NEGRA (BLACKLIST)
 # ========================================================
 def carregar_dados_completos():
     try:
@@ -149,25 +149,39 @@ def carregar_dados_completos():
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-# Separação Inteligente de Dados
 df_tudo = carregar_dados_completos()
 df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
+# 🔥 O NOVO MOTOR INTELIGENTE COM A LISTA NEGRA 🔥
 def obter_opcoes(coluna, lista_base):
+    # 1. Pega os itens cadastrados pelo usuário
     config_items = []
     if not df_configs.empty:
         tipo_config = f"Config_{coluna}"
         if coluna in df_configs.columns:
             config_items = df_configs[df_configs["Tipo"] == tipo_config][coluna].dropna().astype(str).unique().tolist()
     
+    # 2. Pega os itens que estão nos lançamentos antigos (legados)
     existentes = []
     if not df.empty and coluna in df.columns:
         existentes = df[coluna].dropna().astype(str).unique().tolist()
         
-    return sorted(list(set(lista_base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
+    # 3. Pega a LISTA NEGRA de itens que o usuário deletou
+    ocultos = []
+    if not df_configs.empty:
+        # A lista negra fica salva como 'Config_Excluida', guardando na 'Categoria' o tipo da coluna, e em 'Subcategoria' a palavra proibida.
+        ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist()
+        
+    # Junta tudo e remove a Lista Negra
+    todos = set(lista_base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
+    for item in ocultos:
+        if item in todos:
+            todos.remove(item)
+            
+    return sorted(list(todos))
 
 def obter_subcategorias_dinamicas(categoria_alvo):
     base = []
@@ -185,10 +199,18 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     if not df.empty and "Subcategoria" in df.columns and "Categoria" in df.columns:
         existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist()
         
-    return sorted(list(set(base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])))
+    ocultos = []
+    if not df_configs.empty:
+        ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == "Subcategoria")]["Subcategoria"].dropna().astype(str).unique().tolist()
+        
+    todos = set(base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
+    for item in ocultos:
+        if item in todos:
+            todos.remove(item)
+            
+    return sorted(list(todos))
 
-LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
-# 🔥 BANCOS ATUALIZADOS COM CARTEIRAS DIGITAIS (PIX) 🔥
+LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa", "Usuário"]
 LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "PicPay", "99Pay", "Mercado Pago"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
 
@@ -232,7 +254,6 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-# A ABA DE CARTÕES FOI REMOVIDA DAQUI E INCORPORADA NOS CADASTROS!
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
 
 # ========================================================
@@ -670,7 +691,7 @@ with aba_lancamentos:
                         else: st.warning("Selecione algum item primeiro.")
 
 # ========================================================
-# 8. SUPER CENTRAL DE CADASTROS (UNIFICADA)
+# 8. SUPER CENTRAL DE CADASTROS (COM FUNÇÃO DE EXCLUIR DEFAULTS)
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central Única de Cadastros e Configurações")
@@ -688,7 +709,7 @@ with aba_cadastros:
     col_db = col_dict[tipo_cadastro]
     
     # --------------------------------------------------------
-    # 8.1 - LÓGICA EXCLUSIVA PARA CARTÕES E CONTAS BANCÁRIAS
+    # 8.1 - LÓGICA DE CARTÕES
     # --------------------------------------------------------
     if col_db == "Cartao":
         with st.container(border=True):
@@ -760,7 +781,7 @@ with aba_cadastros:
             st.info("Ainda não tens nenhuma conta ou cartão cadastrado.")
 
     # --------------------------------------------------------
-    # 8.2 - LÓGICA PADRÃO PARA MASTER DATA (CATEGORIAS, RESPONSÁVEIS)
+    # 8.2 - LÓGICA PARA MASTER DATA (CATEGORIAS, RESPONSÁVEIS)
     # --------------------------------------------------------
     else:
         opcoes_atuais = obter_opcoes(col_db, [])
@@ -787,7 +808,7 @@ with aba_cadastros:
                         
         with c_cad2:
             with st.container(border=True):
-                st.markdown(f"#### ✏️ Renomear {tipo_cadastro} (Atualização Global)")
+                st.markdown(f"#### ✏️ Renomear {tipo_cadastro} (Global)")
                 st.info("⚠️ Ao renomear, todo o seu histórico será atualizado com o novo nome.")
                 
                 if opcoes_atuais:
@@ -809,26 +830,51 @@ with aba_cadastros:
                     st.write("Nenhum item encontrado nesta categoria.")
                     
         st.markdown("---")
-        st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
-        st.write("Apagar um item daqui **NÃO apaga os seus lançamentos financeiros antigos**. Apenas remove o nome da lista de opções de novos lançamentos.")
         
-        itens_salvos_config = df_configs[df_configs["Tipo"] == f"Config_{col_db}"]
-        if not itens_salvos_config.empty:
-            coluna_busca = "subcategoria" if col_db == "Subcategoria" else col_db.lower()
-            lista_excluir = itens_salvos_config[coluna_busca.capitalize()].dropna().astype(str).unique().tolist()
-            
+        # 🔥 A NOVA SEÇÃO DE LISTA NEGRA (EXCLUSÃO DE PADRÕES E LEGADOS) 🔥
+        st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
+        st.write("Diga adeus a qualquer item da lista (mesmo os padrões do sistema). Isso esconderá a opção de futuros lançamentos, mas não apagará seu histórico passado.")
+        
+        lista_excluir = opcoes_atuais 
+        
+        if lista_excluir:
             item_apagar = st.selectbox(f"Selecione o(a) {tipo_cadastro} que deseja remover da lista:", lista_excluir)
             if st.button("Remover da Lista"):
                 try:
-                    id_config = itens_salvos_config[itens_salvos_config[coluna_busca.capitalize()] == item_apagar]["ID"].iloc[0]
-                    supabase.table("lancamentos").delete().eq("id", id_config).execute()
-                    st.success(f"{item_apagar} removido da sua lista base.")
+                    # 1. Tenta apagar a configuração customizada se ela existir fisicamente
+                    col_mapping = {"Categoria": "Categoria", "Subcategoria": "Subcategoria", "Responsavel": "Responsavel", "Origem_Destino": "Origem_Destino"}
+                    col_real = col_mapping[col_db]
+                    
+                    itens_salvos_config = df_configs[(df_configs["Tipo"] == f"Config_{col_db}") & (df_configs[col_real] == item_apagar)]
+                    if not itens_salvos_config.empty:
+                        id_config = itens_salvos_config["ID"].iloc[0]
+                        supabase.table("lancamentos").delete().eq("id", id_config).execute()
+                    
+                    # 2. Insere na Lista Negra (Blacklist) para bloquear padrões e legados para sempre
+                    nova_linha_oculta = {
+                        "user_email": st.session_state.user_email,
+                        "data_compra": datetime.now().strftime("%Y-%m-%d"),
+                        "competencia": datetime.now().strftime("%Y-%m"),
+                        "tipo": "Config_Excluida",
+                        "categoria": col_db, 
+                        "subcategoria": item_apagar,
+                        "responsavel": st.session_state.user_nome,
+                        "origem_destino": "",
+                        "conta_cartao": "",
+                        "valor": 0.0,
+                        "descricao": "Item Oculto pelo Usuário",
+                        "parcela": "-",
+                        "status": "Config"
+                    }
+                    supabase.table("lancamentos").insert(nova_linha_oculta).execute()
+                    
+                    st.success(f"{item_apagar} removido permanentemente da sua lista!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao remover: {e}")
         else:
-            st.info(f"Não há itens de {tipo_cadastro} salvos manualmente na Central de Cadastros no momento.")
+            st.info(f"Sua lista de {tipo_cadastro} está vazia.")
 
 # ========================================================
 # 9. ASSISTENTE IA 
