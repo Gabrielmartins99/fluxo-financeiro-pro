@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -122,19 +122,19 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE
+# 4. FUNÇÕES BASE E DIVISÃO DE DADOS (CARTÕES VS LANÇAMENTOS)
 # ========================================================
-def carregar_dados():
+def carregar_dados_completos():
     try:
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
-            df = pd.DataFrame(response.data)
-            df = df.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
-            df["Valor"] = pd.to_numeric(df["Valor"]).fillna(0.0)
-            if "Origem_Destino" in df.columns: df["Origem_Destino"] = df["Origem_Destino"].fillna("")
-            else: df["Origem_Destino"] = ""
-            if "Status" not in df.columns: df["Status"] = "Pago"
-            if "Subcategoria" not in df.columns: df["Subcategoria"] = "Geral"
+            df_total = pd.DataFrame(response.data)
+            df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
+            df_total["Valor"] = pd.to_numeric(df_total["Valor"]).fillna(0.0)
+            if "Origem_Destino" in df_total.columns: df_total["Origem_Destino"] = df_total["Origem_Destino"].fillna("")
+            else: df_total["Origem_Destino"] = ""
+            if "Status" not in df_total.columns: df_total["Status"] = "Pago"
+            if "Subcategoria" not in df_total.columns: df_total["Subcategoria"] = "Geral"
             
             def determinar_caixa(row):
                 try:
@@ -144,12 +144,19 @@ def carregar_dados():
                     else: return competencia 
                 except: return str(row.get("Competencia", ""))
             
-            df["Mes_Pagamento"] = df.apply(determinar_caixa, axis=1)
-            return df
+            df_total["Mes_Pagamento"] = df_total.apply(determinar_caixa, axis=1)
+            return df_total
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-df = carregar_dados()
+# 🔥 SEPARAÇÃO INTELIGENTE DE DADOS 🔥
+df_tudo = carregar_dados_completos()
+
+# Os cartões ficam guardados com a etiqueta especial "Config_Cartao"
+df_cartoes = df_tudo[df_tudo["Tipo"] == "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame()
+# O Dashboard e os relatórios só veem os lançamentos reais (escondendo as configurações de cartão)
+df = df_tudo[df_tudo["Tipo"] != "Config_Cartao"].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
+
 
 def obter_opcoes(coluna, lista_base):
     if not df.empty and coluna in df.columns:
@@ -171,8 +178,35 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     return sorted(base)
 
 LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
-LISTA_BANCOS = ["Nubank", "Inter", "Itaú", "Bradesco", "Banco do Brasil", "Dinheiro/Pix"]
+LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "Outro"]
 LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
+
+def gerar_pdf(df_mes, mes_selecionado):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(190, 10, f"Relatorio Financeiro PRO - {mes_selecionado}", 0, 1, 'C')
+    pdf.ln(5)
+    t_rec = df_mes[df_mes["Tipo"] == "Receita"]["Valor"].sum()
+    t_desp = df_mes[df_mes["Tipo"] == "Despesa"]["Valor"].sum()
+    t_inv = df_mes[df_mes["Tipo"] == "Investimento"]["Valor"].sum()
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(190, 10, "Resumo Executivo:", 0, 1, 'L')
+    pdf.set_font("Arial", '', 11)
+    pdf.cell(190, 8, f"Total de Entradas: R$ {t_rec:.2f}", 0, 1, 'L')
+    pdf.cell(190, 8, f"Total de Saidas: R$ {t_desp:.2f}", 0, 1, 'L')
+    pdf.cell(190, 8, f"Total Investido: R$ {t_inv:.2f}", 0, 1, 'L')
+    pdf.cell(190, 8, f"Saldo Final em Conta: R$ {(t_rec - t_desp - t_inv):.2f}", 0, 1, 'L')
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(190, 10, "Ultimos Lancamentos:", 0, 1, 'L')
+    pdf.set_font("Arial", '', 10)
+    df_lista = df_mes.sort_values("Data", ascending=False).head(30)
+    for index, row in df_lista.iterrows():
+        desc = str(row['Descricao'])[:30] 
+        linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Responsavel'][:10]} | {desc} | R$ {row['Valor']:.2f}"
+        pdf.cell(190, 6, linha_texto, 0, 1, 'L')
+    return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
 # 5. HEADER E TABS
@@ -187,18 +221,132 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "🤖 Assistente IA", "🔌 Open Finance"])
+# 🔥 NOVA ABA "CARTÕES" ADICIONADA AQUI 🔥
+aba_dashboard, aba_lancamentos, aba_cartoes, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "💳 Meus Cartões", "🤖 Assistente IA", "🔌 Open Finance"])
 
 # ========================================================
-# 6. DASHBOARD (Omitido para focar na aba de lançamentos, mantendo a estrutura igual ao anterior)
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        st.info("O seu Dashboard continua a funcionar perfeitamente. Pode navegar pelas abas acima.")
+        dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
+        with dash_mensal:
+            
+            st.markdown("#### 🎯 Qual Regime Financeiro desejas visualizar?")
+            tipo_visao = st.radio(
+                "Seleciona o modo de visualização:",
+                ["Regime de Caixa (Data do Pagamento real)", "Regime de Competência (Mês de referência do custo)"],
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+            coluna_data_filtro = "Mes_Pagamento" if "Caixa" in tipo_visao else "Competencia"
+            
+            st.markdown("#### 🔍 Filtros do Painel (O teu Custo Real)")
+            c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
+            with c_filtro1:
+                meses_disponiveis = sorted(df[coluna_data_filtro].dropna().unique(), reverse=True)
+                mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + meses_disponiveis)
+            with c_filtro2:
+                opcoes_resp_dash = sorted(df["Responsavel"].dropna().unique())
+                resp_selecionados = st.multiselect("Responsáveis (Pode escolher mais de um)", opcoes_resp_dash, default=opcoes_resp_dash)
+            with c_filtro3:
+                opcoes_status_dash = ["Todos", "Pago", "Pendente"]
+                status_selecionado = st.selectbox("Status", opcoes_status_dash)
+            
+            df_dash = df.copy()
+            if mes_selecionado != "Ver Tudo":
+                df_dash = df_dash[df_dash[coluna_data_filtro] == mes_selecionado]
+            if resp_selecionados:
+                df_dash = df_dash[df_dash["Responsavel"].isin(resp_selecionados)]
+            else:
+                df_dash = df_dash.iloc[0:0]
+
+            if status_selecionado != "Todos":
+                df_dash = df_dash[df_dash["Status"] == status_selecionado]
+            
+            t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
+            t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
+            t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
+            saldo_liquido = t_rec - t_desp - t_inv
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Conta (Sobra)</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
+            c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
+            c4.markdown(f'<div class="executive-box" style="border-top: 4px solid #8B5CF6;"><div class="term-label">Investido (💼)</div><div class="term-amount" style="color:#8B5CF6;">R$ {t_inv:,.2f}</div></div>', unsafe_allow_html=True)
+            
+            if t_desp > 0:
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_graf1, col_graf2 = st.columns(2)
+                with col_graf1: 
+                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
+                with col_graf2: 
+                    df_top5 = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                    st.plotly_chart(px.bar(df_top5, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_graf3, col_graf4 = st.columns(2)
+                with col_graf3:
+                    df_resp = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Responsavel")["Valor"].sum().reset_index()
+                    st.plotly_chart(px.pie(df_resp, values="Valor", names="Responsavel", title="Gastos por Responsável"), use_container_width=True)
+                with col_graf4:
+                    df_dest = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Origem_Destino"] != "")]
+                    if not df_dest.empty:
+                        df_dest_agrupado = df_dest.groupby("Origem_Destino")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                        st.plotly_chart(px.bar(df_dest_agrupado, x="Valor", y="Origem_Destino", orientation='h', title="Top 5 Recebedores"), use_container_width=True)
+                        
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_graf5, col_graf6 = st.columns(2)
+                with col_graf5:
+                    df_conta = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Conta_Cartao")["Valor"].sum().reset_index()
+                    st.plotly_chart(px.pie(df_conta, values="Valor", names="Conta_Cartao", title="Gastos por Conta / Cartão"), use_container_width=True)
+                with col_graf6:
+                    df_sub = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Subcategoria"] != "Geral")]
+                    if not df_sub.empty:
+                        df_sub_agrupado = df_sub.groupby("Subcategoria")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
+                        st.plotly_chart(px.bar(df_sub_agrupado, x="Valor", y="Subcategoria", orientation='h', title="Top 5 Subcategorias Específicas"), use_container_width=True)
+
+            st.markdown("---")
+            try:
+                txt_resp = ", ".join(resp_selecionados) if resp_selecionados else "Nenhum"
+                pdf_bytes = gerar_pdf(df_dash, f"{mes_selecionado} - Filtro: {txt_resp}")
+                st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro.pdf", mime="application/pdf", type="primary")
+            except: st.warning("Processando gerador de PDF...")
+        
+        with dash_anual:
+            st.plotly_chart(px.bar(df.groupby([coluna_data_filtro, "Tipo"])["Valor"].sum().reset_index(), x=coluna_data_filtro, y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
+            
+        with dash_metas:
+            c_meta1, c_meta2 = st.columns([1, 2])
+            with c_meta1:
+                with st.container(border=True):
+                    st.markdown("#### Nova Meta")
+                    cat_meta = st.selectbox("Escolha a Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
+                    limite_meta = st.number_input("Limite Máximo (R$)", min_value=0.0, value=500.0, step=50.0)
+                    if st.button("Salvar Meta", type="primary", use_container_width=True):
+                        st.session_state.orcamentos[cat_meta] = limite_meta
+                        st.success(f"Meta para {cat_meta} registrada!")
+                        time.sleep(1)
+                        st.rerun()
+            with c_meta2:
+                mes_atual_metas = datetime.now().strftime("%Y-%m")
+                df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
+                st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
+                if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas. Crie uma meta ao lado.")
+                else:
+                    for cat, limite in st.session_state.orcamentos.items():
+                        gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
+                        percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
+                        st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
+                        st.progress(percentual)
+                        if percentual >= 1.0: st.error("🚨 Orçamento estourado nesta categoria!")
+                        elif percentual >= 0.8: st.warning("⚠️ Atenção! Perto do limite.")
+                        st.markdown("---")
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM TRAVA DE SEGURANÇA)
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -224,9 +372,13 @@ with aba_lancamentos:
                 subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
                 subcategoria = st.text_input("Nome da Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
             with c5:
-                opcoes_conta = obter_opcoes("Conta_Cartao", LISTA_BANCOS) + ["➕ Nova Conta..."]
-                conta_sel = st.selectbox("Conta / Cartão", opcoes_conta)
-                conta_cartao = st.text_input("Nome da Nova Conta:") if conta_sel == "➕ Nova Conta..." else conta_sel
+                # 🔥 INTEGRAÇÃO COM OS CARTÕES CADASTRADOS 🔥
+                lista_cartoes_registrados = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
+                opcoes_conta_padrao = ["Conta Corrente / Pix", "Dinheiro Físico"]
+                opcoes_conta_final = opcoes_conta_padrao + lista_cartoes_registrados + ["➕ Cadastrar Novo Fora da Lista..."]
+                
+                conta_sel = st.selectbox("Conta / Cartão", opcoes_conta_final)
+                conta_cartao = st.text_input("Nome da Nova Conta (Ou vá na aba 'Meus Cartões'):") if conta_sel == "➕ Cadastrar Novo Fora da Lista..." else conta_sel
             with c6:
                 opcoes_orig = obter_opcoes("Origem_Destino", ["Supermercado", "Pix", "Empresa"]) + ["➕ Nova Origem/Destino..."]
                 orig_sel = st.selectbox("Origem / Destino", opcoes_orig)
@@ -316,6 +468,30 @@ with aba_lancamentos:
                 except Exception as e: st.error(f"Erro ao salvar: {e}")
             else: st.warning("Preencha os dados base.")
 
+    with aba_importar:
+        st.subheader("Integração Inteligente de Faturas")
+        arquivo = st.file_uploader("Anexe sua fatura CSV/Excel", type=["csv", "xlsx", "xls"])
+        if arquivo:
+            df_fatura = pd.read_csv(arquivo, sep=None, engine='python') if arquivo.name.endswith('.csv') else pd.read_excel(arquivo)
+            df_fatura["Categoria_Sistema"] = "Outros"
+            df_fatura["Tipo_Sistema"] = "Despesa"
+            c1, c2, c3 = st.columns(3)
+            col_data = c1.selectbox("Coluna Data?", df_fatura.columns)
+            col_desc = c2.selectbox("Coluna Descrição?", df_fatura.columns)
+            col_valor = c3.selectbox("Coluna Valor?", df_fatura.columns)
+            df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
+            if st.button("🚀 Salvar Fatura", type="primary"):
+                novas_linhas = []
+                for index, row in df_editado.iterrows():
+                    try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
+                    except: val = 0.0
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Geral", "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
+                if novas_linhas:
+                    supabase.table("lancamentos").insert(novas_linhas).execute()
+                    st.success("Importado!")
+                    time.sleep(1)
+                    st.rerun()
+
     with aba_gerenciar:
         st.markdown("### ✏️ Mesa de Operações: Edição e Ações em Massa")
         if df.empty:
@@ -366,7 +542,6 @@ with aba_lancamentos:
             
             ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
             
-            # 🔥 O NOVO ALERTA DE SEGURANÇA (CONFIRMAÇÃO EM DUAS ETAPAS) 🔥
             if "confirmar_delecao" in st.session_state and st.session_state.confirmar_delecao:
                 st.error(f"⚠️ **ALERTA CRÍTICO DE SEGURANÇA:** Você está prestes a apagar **{len(st.session_state.confirmar_delecao)}** lançamentos PERMANENTEMENTE. Esta ação não pode ser desfeita. Tem certeza absoluta?")
                 col_sim, col_nao = st.columns(2)
@@ -384,7 +559,6 @@ with aba_lancamentos:
                         st.session_state.confirmar_delecao = False
                         st.rerun()
             else:
-                # Botões de Ações Rápidas normais (só aparecem se não estiver no modo Confirmação)
                 st.markdown("#### ⚡ Ações Rápidas (Para os itens selecionados)")
                 c_op1, c_op2, c_op3, c_op4 = st.columns(4)
                 
@@ -457,7 +631,115 @@ with aba_lancamentos:
                 with c_op4:
                     if st.button("🗑️ Apagar Selecionados", use_container_width=True):
                         if ids_selecionados:
-                            # ATIVA A TRAVA DE SEGURANÇA EM VEZ DE APAGAR DIRETAMENTE
                             st.session_state.confirmar_delecao = ids_selecionados
                             st.rerun()
                         else: st.warning("Selecione algum item primeiro.")
+
+# ========================================================
+# 8. ABA DE GERENCIAMENTO DE CARTÕES (NOVA)
+# ========================================================
+with aba_cartoes:
+    st.markdown("### 💳 Gerenciador de Cartões e Contas")
+    st.write("Cadastre aqui os seus cartões de crédito para selecioná-los rapidamente na hora de lançar uma despesa. O sistema saberá exatamente em que dia do mês a sua fatura vence!")
+    
+    with st.container(border=True):
+        st.markdown("#### Adicionar Novo Cartão")
+        c1, c2, c3 = st.columns(3)
+        with c1: 
+            banco_cartao = st.selectbox("Banco / Emissor", LISTA_BANCOS)
+        with c2: 
+            final_cartao = st.text_input("Nome Rápido ou 4 Últimos Dígitos (Ex: 1234)", max_chars=15)
+        with c3: 
+            dia_vencimento = st.number_input("Dia de Vencimento da Fatura", min_value=1, max_value=31, value=10)
+            
+        if st.button("💾 Salvar Cartão no Sistema", type="primary"):
+            if final_cartao.strip() != "":
+                nova_linha_cartao = {
+                    "user_email": st.session_state.user_email,
+                    "data_compra": datetime.now().strftime("%Y-%m-%d"),
+                    "competencia": datetime.now().strftime("%Y-%m"),
+                    "tipo": "Config_Cartao",
+                    "categoria": banco_cartao,
+                    "subcategoria": final_cartao,
+                    "conta_cartao": f"{banco_cartao} - Final {final_cartao} (Venc: dia {dia_vencimento})",
+                    "valor": float(dia_vencimento),
+                    "descricao": "Configuração de Cartão",
+                    "responsavel": st.session_state.user_nome,
+                    "status": "Pago"
+                }
+                try:
+                    supabase.table("lancamentos").insert(nova_linha_cartao).execute()
+                    st.success("Cartão registado! Agora ele aparecerá nas opções de Lançamento.")
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar cartão: {e}")
+            else:
+                st.warning("Por favor, preencha os últimos dígitos ou um nome para o cartão.")
+
+    st.markdown("---")
+    st.markdown("#### Seus Cartões Registados")
+    if not df_cartoes.empty:
+        df_cartoes_view = df_cartoes[["ID", "conta_cartao", "categoria", "valor"]].copy()
+        df_cartoes_view = df_cartoes_view.rename(columns={"conta_cartao": "Nome do Cartão no Sistema", "categoria": "Banco", "valor": "Dia de Vencimento"})
+        
+        st.dataframe(df_cartoes_view.drop(columns=["ID"]), use_container_width=True, hide_index=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.write("Deseja apagar algum cartão?")
+        cartao_para_apagar = st.selectbox("Selecione o cartão que deseja remover:", df_cartoes_view["Nome do Cartão no Sistema"].tolist())
+        if st.button("🗑️ Remover Cartão Selecionado"):
+            id_para_remover = df_cartoes[df_cartoes["conta_cartao"] == cartao_para_apagar]["ID"].iloc[0]
+            try:
+                supabase.table("lancamentos").delete().eq("id", id_para_remover).execute()
+                st.success("Cartão removido da sua lista!")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao remover: {e}")
+    else:
+        st.info("Ainda não tens nenhum cartão cadastrado. Usa o formulário acima para adicionar o primeiro!")
+
+# ========================================================
+# 9. ASSISTENTE IA 
+# ========================================================
+with aba_assistente:
+    st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
+    boas_vindas = f"Olá, {st.session_state.user_nome}! Pergunte sobre faturas, períodos ou gastos do seu histórico."
+    
+    if modelo_ia:
+        if "mensagens_chat" not in st.session_state: 
+            st.session_state.mensagens_chat = [{"role": "assistant", "content": boas_vindas}]
+        for msg in st.session_state.mensagens_chat:
+            with st.chat_message(msg["role"]): st.markdown(msg["content"])
+        
+        prompt = st.chat_input("Consulte sua base de dados inteligente...")
+        if prompt:
+            st.session_state.mensagens_chat.append({"role": "user", "content": prompt})
+            with st.chat_message("user"): st.markdown(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Processando dados internos..."):
+                    try:
+                        hist_txt = df[["Data", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
+                        prompt_final = f"Atue como o motor financeiro de {st.session_state.user_nome}. Faça somas matemáticas se pedido datas (dia 1 ao 5) ou nomes (iFood).\n\nDADOS:\n{hist_txt}\nPERGUNTA: {prompt}"
+                        resposta = modelo_ia.generate_content(prompt_final)
+                        st.markdown(resposta.text)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta.text})
+                    except Exception as e: st.error(f"Erro de IA: {e}")
+
+# ========================================================
+# 10. OPEN FINANCE
+# ========================================================
+with aba_openfinance:
+    st.subheader("🔌 Hub de Integração Bancária")
+    if "banco_conectado" not in st.session_state: st.session_state.banco_conectado = False
+    if not st.session_state.banco_conectado:
+        if st.button("🚀 Simular Conexão (Bypass)", type="primary"):
+            st.session_state.banco_conectado = True
+            st.session_state.item_id_simulado = f"item_sandbox_{int(time.time())}"
+            st.rerun()
+    else:
+        st.markdown(f"<div class='status-box'>🎉 MÁGICA CONCLUÍDA!<br><br>Item ID: {st.session_state.item_id_simulado}</div>", unsafe_allow_html=True)
+        if st.button("🔴 Desconectar Conta"):
+            st.session_state.banco_conectado = False
+            st.rerun()
