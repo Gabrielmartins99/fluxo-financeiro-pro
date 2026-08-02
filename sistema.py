@@ -26,11 +26,10 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 🔥 CORREÇÃO DA IA: Usando o nome de batismo atualizado do Google 🔥
+# 🔥 CORREÇÃO DA IA: Utilizando o modelo Clássico e Universal (gemini-pro) 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # Trocamos para 'gemini-1.5-flash-latest' para garantir compatibilidade com a API atual
-    modelo_ia = genai.GenerativeModel('gemini-1.5-flash-latest')
+    modelo_ia = genai.GenerativeModel('gemini-pro')
 else:
     modelo_ia = None
 
@@ -699,9 +698,6 @@ with aba_cadastros:
     tipo_cadastro = st.selectbox("O que você deseja configurar ou gerenciar agora?", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
     
-    # --------------------------------------------------------
-    # 8.1 - LÓGICA DE CARTÕES
-    # --------------------------------------------------------
     if col_db == "Cartao":
         with st.container(border=True):
             st.markdown("#### 💳 Adicionar Nova Conta ou Cartão")
@@ -771,9 +767,6 @@ with aba_cadastros:
         else:
             st.info("Ainda não tens nenhuma conta ou cartão cadastrado.")
 
-    # --------------------------------------------------------
-    # 8.2 - LÓGICA MESTRA PARA CADASTROS (COM BLACKLIST)
-    # --------------------------------------------------------
     else:
         if col_db == "Categoria": lista_base_atual = LISTA_CATEGORIAS
         elif col_db == "Responsavel": lista_base_atual = LISTA_RESPONSAVEIS_BASE
