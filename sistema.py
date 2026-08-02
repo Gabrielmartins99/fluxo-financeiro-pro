@@ -381,8 +381,8 @@ with aba_lancamentos:
                 resp_sel = st.selectbox("Responsável", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
             
-            # Orientação direta na interface para o usuário
-            with c8: descricao = st.text_input("Descrição Resumida (Ex: Salário Fixo - Santa Ilha)")
+            # ATUALIZAÇÃO: O rótulo explicativo passou a ser universal e descritivo
+            with c8: descricao = st.text_input("Descrição Resumida (Ex: Aluguel, Mensalidade Academia)")
             
             with c9: 
                 ano_atual = datetime.now().year
@@ -413,7 +413,6 @@ with aba_lancamentos:
                 start_year = ano_comp
                 start_month = int(mes_num)
                 
-                # 🔥 MOTOR DE DESCRIÇÃO DINÂMICA 🔥
                 meses_abrev = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
                 
                 for i in range(parcelas):
@@ -425,7 +424,6 @@ with aba_lancamentos:
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
-                    # Constrói a descrição inteligente se for recorrente
                     if parcelas > 1:
                         desc_dinamica = f"{descricao.strip()} ({meses_abrev[mes_atual_loop]}/{y})"
                     else:
