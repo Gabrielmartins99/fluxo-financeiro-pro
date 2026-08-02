@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO COM TRADUTOR DE ERROS DE REDE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -338,7 +338,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA (COM FUNÇÃO SPLIT)
+# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
 # ========================================================
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -393,7 +393,6 @@ with aba_lancamentos:
                 
             st.markdown("---")
             
-            # 🔥 NOVA FUNCIONALIDADE: DIVISÃO DE DESPESAS (SPLIT) 🔥
             dividir_despesa = st.checkbox("🤝 Dividir este lançamento com outra pessoa?")
             if dividir_despesa:
                 col_split1, col_split2 = st.columns(2)
@@ -442,14 +441,12 @@ with aba_lancamentos:
                     else:
                         desc_dinamica = descricao.strip()
                     
-                    # Salva a linha do Responsável Principal (Gabriel, por exemplo)
                     valor_parcela_1 = valor_resp_1 / parcelas if modo_lancamento == "Parcelado" else valor_resp_1
                     novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_1, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                     
-                    # Salva a linha do Responsável Secundário (Sogro), se existir o split!
                     if dividir_despesa and valor_resp_2 > 0:
                         valor_parcela_2 = valor_resp_2 / parcelas if modo_lancamento == "Parcelado" else valor_resp_2
-                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"}) # O segundo responsável nasce como Pendente para você lembrar de cobrar.
+                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"})
 
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
@@ -484,12 +481,14 @@ with aba_lancamentos:
                     st.rerun()
 
     with aba_gerenciar:
-        st.markdown("### ✏️ Mesa de Operações: Edição Visual e Exclusão em Massa")
+        st.markdown("### ✏️ Mesa de Operações: Edição e Ações em Massa")
         if df.empty:
             st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
             df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
-            df_view.insert(0, "Apagar?", False)
+            
+            # 🔥 ATUALIZAÇÃO: A coluna agora chama-se "Selecionar" para permitir múltiplas ações 🔥
+            df_view.insert(0, "Selecionar", False)
             
             st.markdown("#### 🔍 Filtros de Busca")
             c_f1, c_f2, c_f3, c_f4 = st.columns(4)
@@ -518,7 +517,7 @@ with aba_lancamentos:
             if filtro_status != "Todos":
                 df_view = df_view[df_view["Status"] == filtro_status]
             
-            st.write(f"🔒 **Instruções:** Editando {len(df_view)} lançamentos. A coluna **Subcategoria** já está disponível para correções em massa.")
+            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Marque a caixinha **'Selecionar'** nos itens desejados e use os botões abaixo para alterar tudo de uma vez!")
             
             df_resultado = st.data_editor(
                 df_view, 
@@ -527,63 +526,92 @@ with aba_lancamentos:
                 disabled=["ID"] 
             )
             
-            ids_para_apagar = df_resultado[df_resultado["Apagar?"] == True]["ID"].tolist()
+            # Pega todos os IDs que você marcou na caixinha "Selecionar"
+            ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
             
-            c_op1, c_op2 = st.columns(2)
+            st.markdown("#### ⚡ Ações Rápidas (Para os itens selecionados)")
+            c_op1, c_op2, c_op3, c_op4 = st.columns(4)
+            
             with c_op1:
-                if st.button("💾 Salvar Edições da Tabela", type="primary", use_container_width=True):
+                # O botão antigo de salvamento manual continua aqui
+                if st.button("💾 Salvar Edições Manuais", type="primary", use_container_width=True):
                     try:
                         mudancas_realizadas = 0
                         for idx in range(len(df_resultado)):
                             row_editada = df_resultado.iloc[idx]
                             row_original = df_view.iloc[idx]
                             
-                            if not row_editada["Apagar?"]:
-                                if (str(row_editada["Data"]) != str(row_original["Data"]) or
-                                    float(row_editada["Valor"]) != float(row_original["Valor"]) or
-                                    str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
-                                    str(row_editada["Descricao"]) != str(row_original["Descricao"]) or
-                                    str(row_editada["Categoria"]) != str(row_original["Categoria"]) or
-                                    str(row_editada["Subcategoria"]) != str(row_original["Subcategoria"]) or
-                                    str(row_editada["Conta_Cartao"]) != str(row_original["Conta_Cartao"]) or
-                                    str(row_editada["Responsavel"]) != str(row_original["Responsavel"]) or
-                                    str(row_editada["Origem_Destino"]) != str(row_original["Origem_Destino"]) or
-                                    str(row_editada["Status"]) != str(row_original["Status"]) or
-                                    str(row_editada["Tipo"]) != str(row_original["Tipo"])):
-                                    
-                                    supabase.table("lancamentos").update({
-                                        "data_compra": str(row_editada["Data"]),
-                                        "competencia": str(row_editada["Competencia"]),
-                                        "tipo": str(row_editada["Tipo"]),
-                                        "categoria": str(row_editada["Categoria"]),
-                                        "subcategoria": str(row_editada["Subcategoria"]),
-                                        "conta_cartao": str(row_editada["Conta_Cartao"]),
-                                        "descricao": str(row_editada["Descricao"]),
-                                        "valor": float(row_editada["Valor"]),
-                                        "responsavel": str(row_editada["Responsavel"]),
-                                        "origem_destino": str(row_editada["Origem_Destino"]),
-                                        "status": str(row_editada["Status"])
-                                    }).eq("id", str(row_editada["ID"])).execute()
-                                    mudancas_realizadas += 1
+                            # Verifica se você editou textos ou valores manualmente
+                            if (str(row_editada["Data"]) != str(row_original["Data"]) or
+                                float(row_editada["Valor"]) != float(row_original["Valor"]) or
+                                str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
+                                str(row_editada["Descricao"]) != str(row_original["Descricao"]) or
+                                str(row_editada["Categoria"]) != str(row_original["Categoria"]) or
+                                str(row_editada["Subcategoria"]) != str(row_original["Subcategoria"]) or
+                                str(row_editada["Conta_Cartao"]) != str(row_original["Conta_Cartao"]) or
+                                str(row_editada["Responsavel"]) != str(row_original["Responsavel"]) or
+                                str(row_editada["Origem_Destino"]) != str(row_original["Origem_Destino"]) or
+                                str(row_editada["Status"]) != str(row_original["Status"]) or
+                                str(row_editada["Tipo"]) != str(row_original["Tipo"])):
+                                
+                                supabase.table("lancamentos").update({
+                                    "data_compra": str(row_editada["Data"]),
+                                    "competencia": str(row_editada["Competencia"]),
+                                    "tipo": str(row_editada["Tipo"]),
+                                    "categoria": str(row_editada["Categoria"]),
+                                    "subcategoria": str(row_editada["Subcategoria"]),
+                                    "conta_cartao": str(row_editada["Conta_Cartao"]),
+                                    "descricao": str(row_editada["Descricao"]),
+                                    "valor": float(row_editada["Valor"]),
+                                    "responsavel": str(row_editada["Responsavel"]),
+                                    "origem_destino": str(row_editada["Origem_Destino"]),
+                                    "status": str(row_editada["Status"])
+                                }).eq("id", str(row_editada["ID"])).execute()
+                                mudancas_realizadas += 1
                         
                         if mudancas_realizadas > 0:
-                            st.success(f"✅ Sucesso! {mudancas_realizadas} lançamentos atualizados.")
+                            st.success(f"✅ Sucesso! {mudancas_realizadas} edições salvas.")
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.info("Nenhuma edição detectada.")
+                            st.info("Nenhuma edição manual detectada.")
                     except Exception as e:
                         st.error(f"Erro ao salvar edições: {e}")
-            
+
+            # 🔥 OS NOVOS SUPER BOTÕES DE AUTOMAÇÃO 🔥
             with c_op2:
-                if ids_para_apagar:
-                    if st.button(f"🗑️ Apagar {len(ids_para_apagar)} Selecionados", use_container_width=True):
+                if st.button("✅ Marcar como Pago", use_container_width=True):
+                    if ids_selecionados:
                         try:
-                            supabase.table("lancamentos").delete().in_("id", ids_para_apagar).execute()
+                            # Uma única chamada poderosa ao banco para atualizar todos de uma vez
+                            supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
+                            st.success("Tudo atualizado para Pago!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: st.error(f"Erro: {e}")
+                    else: st.warning("Selecione algum item primeiro.")
+
+            with c_op3:
+                if st.button("⏳ Marcar como Pendente", use_container_width=True):
+                    if ids_selecionados:
+                        try:
+                            supabase.table("lancamentos").update({"status": "Pendente"}).in_("id", ids_selecionados).execute()
+                            st.success("Tudo atualizado para Pendente!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: st.error(f"Erro: {e}")
+                    else: st.warning("Selecione algum item primeiro.")
+            
+            with c_op4:
+                if st.button("🗑️ Apagar Lançamentos", use_container_width=True):
+                    if ids_selecionados:
+                        try:
+                            supabase.table("lancamentos").delete().in_("id", ids_selecionados).execute()
                             st.error("Lançamentos Removidos!")
                             time.sleep(1)
                             st.rerun()
                         except Exception as e: st.error(f"Erro ao excluir: {e}")
+                    else: st.warning("Selecione algum item primeiro.")
 
 # ========================================================
 # 8. ASSISTENTE IA 
