@@ -114,7 +114,6 @@ if not st.session_state.user_email:
                             st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
                         except Exception as e: 
                             erro_str = str(e)
-                            # ATUALIZAÇÃO: Se for erro de DNS (Pausado), damos uma mensagem limpa e clara!
                             if "Name or service not known" in erro_str or "Errno -2" in erro_str:
                                 st.error("🚨 Servidor Offline: O seu banco de dados no Supabase entrou em Modo Pausa por inatividade. Acesse o painel do Supabase e clique em 'Restore' para reativar o sistema.")
                             else:
@@ -123,7 +122,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE, LISTAS E MOTOR INTELIGENTE
+# 4. FUNÇÕES BASE E MOTOR DE CAIXA
 # ========================================================
 def carregar_dados():
     try:
@@ -271,6 +270,7 @@ with aba_dashboard:
             
             if t_desp > 0:
                 st.markdown("<br>", unsafe_allow_html=True)
+                
                 col_graf1, col_graf2 = st.columns(2)
                 with col_graf1: 
                     st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
@@ -380,7 +380,9 @@ with aba_lancamentos:
                 opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
                 resp_sel = st.selectbox("Responsável", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
-            with c8: descricao = st.text_input("Descrição Resumida")
+            
+            # Orientação direta na interface para o usuário
+            with c8: descricao = st.text_input("Descrição Resumida (Ex: Salário Fixo - Santa Ilha)")
             
             with c9: 
                 ano_atual = datetime.now().year
@@ -411,15 +413,25 @@ with aba_lancamentos:
                 start_year = ano_comp
                 start_month = int(mes_num)
                 
+                # 🔥 MOTOR DE DESCRIÇÃO DINÂMICA 🔥
+                meses_abrev = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
+                
                 for i in range(parcelas):
                     m = start_month - 1 + i
                     y = start_year + (m // 12)
-                    comp = f"{y}-{(m % 12) + 1:02d}"
+                    mes_atual_loop = (m % 12) + 1
+                    comp = f"{y}-{mes_atual_loop:02d}"
                     origem_segura = origem_destino if origem_destino else ""
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": descricao, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
+                    # Constrói a descrição inteligente se for recorrente
+                    if parcelas > 1:
+                        desc_dinamica = f"{descricao.strip()} ({meses_abrev[mes_atual_loop]}/{y})"
+                    else:
+                        desc_dinamica = descricao.strip()
+                    
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_por_mes, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
