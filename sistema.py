@@ -26,10 +26,8 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 🔥 CORREÇÃO DA IA: Utilizando a versão 1.0 explícita 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # A designação 'gemini-1.0-pro' é a mais universal para evitar o erro 404
     modelo_ia = genai.GenerativeModel('gemini-1.0-pro')
 else:
     modelo_ia = None
@@ -137,22 +135,17 @@ def carregar_dados_completos():
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df_total = pd.DataFrame(response.data)
-            df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
+            if "mes_pagamento" not in df_total.columns:
+                df_total["mes_pagamento"] = df_total["competencia"]
+            df_total["mes_pagamento"] = df_total["mes_pagamento"].fillna(df_total["competencia"])
+            
+            df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "mes_pagamento": "Mes_Pagamento", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df_total["Valor"] = pd.to_numeric(df_total["Valor"]).fillna(0.0)
             if "Origem_Destino" in df_total.columns: df_total["Origem_Destino"] = df_total["Origem_Destino"].fillna("")
             else: df_total["Origem_Destino"] = ""
             if "Status" not in df_total.columns: df_total["Status"] = "Pago"
             if "Subcategoria" not in df_total.columns: df_total["Subcategoria"] = "Geral"
             
-            def determinar_caixa(row):
-                try:
-                    data_ocorreu = pd.to_datetime(row["Data"]).strftime("%Y-%m")
-                    competencia = str(row["Competencia"])
-                    if data_ocorreu > competencia: return data_ocorreu 
-                    else: return competencia 
-                except: return str(row.get("Competencia", ""))
-            
-            df_total["Mes_Pagamento"] = df_total.apply(determinar_caixa, axis=1)
             return df_total
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
@@ -248,21 +241,23 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD E FATURAS
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_mensal, dash_anual, dash_metas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos"])
+        dash_mensal, dash_anual, dash_metas, dash_faturas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos", "💳 Faturas de Cartão"])
+        
         with dash_mensal:
-            
-            st.markdown("#### 🎯 Qual Regime Financeiro desejas visualizar?")
+            # 🔥 LINGUAGEM SIMPLIFICADA NO DASHBOARD 🔥
+            st.markdown("#### 🎯 Como deseja visualizar os seus gráficos e resumos?")
             tipo_visao = st.radio(
                 "Seleciona o modo de visualização:",
-                ["Regime de Caixa (Data do Pagamento real)", "Regime de Competência (Mês de referência do custo)"],
+                ["Pelo Vencimento da Fatura / Pagamento (Quando o dinheiro sai da conta)", 
+                 "Pela Data da Compra (Quando a despesa foi gerada)"],
                 horizontal=True,
                 label_visibility="collapsed"
             )
-            coluna_data_filtro = "Mes_Pagamento" if "Caixa" in tipo_visao else "Competencia"
+            coluna_data_filtro = "Mes_Pagamento" if "Vencimento" in tipo_visao else "Competencia"
             
             st.markdown("#### 🔍 Filtros do Painel (O teu Custo Real)")
             c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
@@ -366,16 +361,44 @@ with aba_dashboard:
                         if percentual >= 1.0: st.error("🚨 Orçamento estourado nesta categoria!")
                         elif percentual >= 0.8: st.warning("⚠️ Atenção! Perto do limite.")
                         st.markdown("---")
+        
+        with dash_faturas:
+            st.markdown("### 💳 Controle de Faturas e Vencimentos")
+            st.write("Veja exatamente o valor total que deverá ser pago nos seus cartões no mês selecionado.")
+            
+            meses_fatura = sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
+            if meses_fatura:
+                mes_fat_sel = st.selectbox("Selecione o Mês da Fatura (Mês de Pagamento):", meses_fatura)
+                
+                df_fatura_mes = df[(df["Mes_Pagamento"] == mes_fat_sel) & (df["Tipo"] == "Despesa")]
+                
+                nomes_cartoes_cadastrados = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
+                df_apenas_cartoes = df_fatura_mes[df_fatura_mes["Conta_Cartao"].isin(nomes_cartoes_cadastrados)]
+                
+                if not df_apenas_cartoes.empty:
+                    df_resumo_faturas = df_apenas_cartoes.groupby("Conta_Cartao")["Valor"].sum().reset_index()
+                    df_resumo_faturas = df_resumo_faturas.sort_values("Valor", ascending=False)
+                    
+                    st.plotly_chart(px.bar(df_resumo_faturas, x="Valor", y="Conta_Cartao", orientation='h', title=f"Total das Faturas para {mes_fat_sel}", color_discrete_sequence=["#EF4444"]), use_container_width=True)
+                    
+                    st.markdown("#### Detalhamento das Faturas")
+                    st.dataframe(df_apenas_cartoes[["Data", "Conta_Cartao", "Descricao", "Parcela", "Responsavel", "Valor"]].sort_values("Conta_Cartao"), use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"Não existem compras registadas em cartões de crédito para pagamento na fatura de {mes_fat_sel}.")
+            else:
+                st.info("Nenhum dado de pagamento encontrado.")
+
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS E EDIÇÃO EM MASSA
+# 7. LANÇAMENTOS COM NOMENCLATURA SIMPLIFICADA
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
     nova_linha = {
         "user_email": st.session_state.user_email,
         "data_compra": datetime.now().strftime("%Y-%m-%d"),
         "competencia": datetime.now().strftime("%Y-%m"),
+        "mes_pagamento": datetime.now().strftime("%Y-%m"),
         "tipo": f"Config_{tipo_cad}",
         "categoria": valor if tipo_cad == "Categoria" else (vinculada if tipo_cad == "Subcategoria" else ""),
         "subcategoria": valor if tipo_cad == "Subcategoria" else "",
@@ -387,7 +410,8 @@ def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
         "parcela": "-",
         "status": "Config"
     }
-    supabase.table("lancamentos").insert(nova_linha).execute()
+    try: supabase.table("lancamentos").insert(nova_linha).execute()
+    except: pass
 
 with aba_lancamentos:
     aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
@@ -399,7 +423,7 @@ with aba_lancamentos:
             c1, c2, c3 = st.columns(3)
             with c1: tipo = st.selectbox("Tipo da Movimentação", ["Despesa", "Receita", "Investimento"])
             with c2: valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
-            with c3: data_compra = st.date_input("Data do Ocorrido")
+            with c3: data_compra = st.date_input("Data exata do Ocorrido")
 
         with st.container(border=True):
             st.markdown("#### 2. Classificação")
@@ -425,23 +449,30 @@ with aba_lancamentos:
                 origem_destino = st.text_input("Nome da Nova Origem/Destino:") if orig_sel == "➕ Nova Origem/Destino..." else orig_sel
 
         with st.container(border=True):
-            st.markdown("#### 3. Detalhes Adicionais e Rateio (Split)")
-            c7, c8, c9, c10 = st.columns(4)
+            st.markdown("#### 3. Detalhes Adicionais, Datas e Rateio (Split)")
+            
+            c7, c8 = st.columns(2)
             with c7:
                 opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
                 resp_sel = st.selectbox("Responsável Principal", opcoes_resp)
                 responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
             with c8: descricao = st.text_input("Descrição Resumida (Ex: Aluguel, Mensalidade Academia)")
             
-            with c9: 
-                ano_atual = datetime.now().year
-                anos_lista = list(range(2020, 2035))
-                ano_comp = st.selectbox("Ano Competência", anos_lista, index=anos_lista.index(ano_atual))
-            with c10:
-                meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
-                mes_sel = st.selectbox("Mês Competência", meses_nomes, index=datetime.now().month - 1)
-                mes_num = mes_sel.split(" - ")[0]
-                competencia_final = f"{ano_comp}-{mes_num}"
+            # 🔥 LINGUAGEM SIMPLIFICADA NO LANÇAMENTO 🔥
+            st.markdown("##### 📅 Definir Mês da Compra vs Mês do Pagamento (Fatura)")
+            c_data1, c_data2, c_data3, c_data4 = st.columns(4)
+            ano_atual = datetime.now().year
+            anos_lista = list(range(2020, 2035))
+            meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
+            
+            with c_data1: ano_comp = st.selectbox("Ano da Compra", anos_lista, index=anos_lista.index(ano_atual))
+            with c_data2: mes_comp_sel = st.selectbox("Mês da Compra", meses_nomes, index=datetime.now().month - 1)
+            
+            with c_data3: ano_pag = st.selectbox("Ano do Pagamento/Fatura", anos_lista, index=anos_lista.index(ano_atual))
+            with c_data4: mes_pag_sel = st.selectbox("Mês do Pagamento/Fatura", meses_nomes, index=datetime.now().month - 1)
+            
+            mes_num_comp = mes_comp_sel.split(" - ")[0]
+            mes_num_pag = mes_pag_sel.split(" - ")[0]
                 
             st.markdown("---")
             
@@ -481,37 +512,46 @@ with aba_lancamentos:
                 if orig_sel == "➕ Nova Origem/Destino..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 
                 novas_linhas = []
-                start_year = ano_comp
-                start_month = int(mes_num)
+                start_year_comp = ano_comp
+                start_month_comp = int(mes_num_comp)
+                start_year_pag = ano_pag
+                start_month_pag = int(mes_num_pag)
+                
                 meses_abrev = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
                 
                 for i in range(parcelas):
-                    m = start_month - 1 + i
-                    y = start_year + (m // 12)
-                    mes_atual_loop = (m % 12) + 1
-                    comp = f"{y}-{mes_atual_loop:02d}"
+                    m_comp = start_month_comp - 1 + i
+                    y_comp = start_year_comp + (m_comp // 12)
+                    mes_atual_loop_comp = (m_comp % 12) + 1
+                    str_competencia = f"{y_comp}-{mes_atual_loop_comp:02d}"
+                    
+                    m_pag = start_month_pag - 1 + i
+                    y_pag = start_year_pag + (m_pag // 12)
+                    mes_atual_loop_pag = (m_pag % 12) + 1
+                    str_pagamento = f"{y_pag}-{mes_atual_loop_pag:02d}"
+                    
                     origem_segura = origem_destino if origem_destino else ""
                     nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
                     status_final = status_pagamento if i == 0 else "Pendente"
                     
                     if parcelas > 1:
-                        desc_dinamica = f"{descricao.strip()} ({meses_abrev[mes_atual_loop]}/{y})"
+                        desc_dinamica = f"{descricao.strip()} ({meses_abrev[mes_atual_loop_comp]}/{y_comp})"
                     else:
                         desc_dinamica = descricao.strip()
                     
                     valor_parcela_1 = valor_resp_1 / parcelas if modo_lancamento == "Parcelado" else valor_resp_1
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_1, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": str_competencia, "mes_pagamento": str_pagamento, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_1, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
                     
                     if dividir_despesa and valor_resp_2 > 0:
                         valor_parcela_2 = valor_resp_2 / parcelas if modo_lancamento == "Parcelado" else valor_resp_2
-                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": comp, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"})
+                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": str_competencia, "mes_pagamento": str_pagamento, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"})
 
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
                     time.sleep(1)
                     st.rerun()
-                except Exception as e: st.error(f"Erro ao salvar: {e}")
+                except Exception as e: st.error(f"Erro ao salvar: {e}. ATENÇÃO: Lembre-se de criar a coluna 'mes_pagamento' no Supabase conforme as instruções do Chat!")
             else: st.warning("Preencha os dados base.")
 
     with aba_importar:
@@ -531,19 +571,22 @@ with aba_lancamentos:
                 for index, row in df_editado.iterrows():
                     try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
                     except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Geral", "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
+                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Geral", "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
                 if novas_linhas:
-                    supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("Importado!")
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        supabase.table("lancamentos").insert(novas_linhas).execute()
+                        st.success("Importado!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e: st.error(f"Erro ao salvar: {e}. Criou a coluna mes_pagamento no Supabase?")
 
     with aba_gerenciar:
         st.markdown("### ✏️ Mesa de Operações: Edição e Ações em Massa")
         if df.empty:
-            st.info("Nenhum lançamento encontrado para gerenciar. Por favor, insira novos dados.")
+            st.info("Nenhum lançamento encontrado para gerenciar.")
         else:
-            df_view = df[["ID", "Data", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
+            # Mostrando o novo campo Mes_Pagamento na tabela de edição
+            df_view = df[["ID", "Data", "Competencia", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
             
             st.markdown("#### 🔍 Filtros de Busca")
             c_f1, c_f2, c_f3, c_f4 = st.columns(4)
@@ -577,7 +620,7 @@ with aba_lancamentos:
             selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos filtrados abaixo", value=False)
             df_view.insert(0, "Selecionar", selecionar_tudo)
             
-            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Marque a caixinha acima para selecionar todos de uma vez, ou escolha itens individuais.")
+            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Pode editar os campos diretamente na tabela!")
             
             df_resultado = st.data_editor(
                 df_view, 
@@ -589,7 +632,7 @@ with aba_lancamentos:
             ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
             
             if "confirmar_delecao" in st.session_state and st.session_state.confirmar_delecao:
-                st.error(f"⚠️ **ALERTA CRÍTICO DE SEGURANÇA:** Você está prestes a apagar **{len(st.session_state.confirmar_delecao)}** lançamentos PERMANENTEMENTE. Esta ação não pode ser desfeita. Tem certeza absoluta?")
+                st.error(f"⚠️ **ALERTA CRÍTICO DE SEGURANÇA:** Você está prestes a apagar **{len(st.session_state.confirmar_delecao)}** lançamentos PERMANENTEMENTE.")
                 col_sim, col_nao = st.columns(2)
                 with col_sim:
                     if st.button("🚨 SIM, APAGAR DEFINITIVAMENTE", use_container_width=True):
@@ -619,6 +662,7 @@ with aba_lancamentos:
                                 if (str(row_editada["Data"]) != str(row_original["Data"]) or
                                     float(row_editada["Valor"]) != float(row_original["Valor"]) or
                                     str(row_editada["Competencia"]) != str(row_original["Competencia"]) or
+                                    str(row_editada["Mes_Pagamento"]) != str(row_original["Mes_Pagamento"]) or
                                     str(row_editada["Descricao"]) != str(row_original["Descricao"]) or
                                     str(row_editada["Categoria"]) != str(row_original["Categoria"]) or
                                     str(row_editada["Subcategoria"]) != str(row_original["Subcategoria"]) or
@@ -631,6 +675,7 @@ with aba_lancamentos:
                                     supabase.table("lancamentos").update({
                                         "data_compra": str(row_editada["Data"]),
                                         "competencia": str(row_editada["Competencia"]),
+                                        "mes_pagamento": str(row_editada["Mes_Pagamento"]),
                                         "tipo": str(row_editada["Tipo"]),
                                         "categoria": str(row_editada["Categoria"]),
                                         "subcategoria": str(row_editada["Subcategoria"]),
@@ -726,6 +771,7 @@ with aba_cadastros:
                         "user_email": st.session_state.user_email,
                         "data_compra": datetime.now().strftime("%Y-%m-%d"),
                         "competencia": datetime.now().strftime("%Y-%m"),
+                        "mes_pagamento": datetime.now().strftime("%Y-%m"),
                         "tipo": "Config_Cartao",
                         "categoria": banco_cartao,
                         "subcategoria": final_cartao,
@@ -820,6 +866,7 @@ with aba_cadastros:
                                     "user_email": st.session_state.user_email,
                                     "data_compra": datetime.now().strftime("%Y-%m-%d"),
                                     "competencia": datetime.now().strftime("%Y-%m"),
+                                    "mes_pagamento": datetime.now().strftime("%Y-%m"),
                                     "tipo": "Config_Excluida",
                                     "categoria": col_db, 
                                     "subcategoria": item_para_editar,
@@ -848,7 +895,7 @@ with aba_cadastros:
         st.markdown("---")
         
         st.markdown(f"#### 🗑️ Excluir {tipo_cadastro} da Lista Base")
-        st.write("Diga adeus a qualquer item da lista (mesmo os padrões do sistema). Isso esconderá a opção de futuros lançamentos, mas não apagará o seu histórico financeiro passado.")
+        st.write("Diga adeus a qualquer item da lista. Isso esconderá a opção de futuros lançamentos, mas não apagará o seu histórico financeiro passado.")
         
         lista_excluir = opcoes_atuais 
         
@@ -871,6 +918,7 @@ with aba_cadastros:
                         "user_email": st.session_state.user_email,
                         "data_compra": datetime.now().strftime("%Y-%m-%d"),
                         "competencia": datetime.now().strftime("%Y-%m"),
+                        "mes_pagamento": datetime.now().strftime("%Y-%m"),
                         "tipo": "Config_Excluida",
                         "categoria": col_db, 
                         "subcategoria": item_apagar,
