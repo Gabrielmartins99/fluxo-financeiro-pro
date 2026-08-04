@@ -9,8 +9,9 @@ import extra_streamlit_components as stx
 from fpdf import FPDF
 
 # ========================================================
-# 1. CREDENCIAIS BASE
+# 1. CREDENCIAIS BASE E DOCUMENTAÇÃO
 # ========================================================
+# Conexão segura com o Supabase (Banco de Dados)
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
@@ -25,6 +26,7 @@ def init_connection():
 
 supabase: Client = init_connection()
 
+# Configuração da IA (Cérebro Digital)
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_ia = genai.GenerativeModel('gemini-1.0-pro')
@@ -45,7 +47,7 @@ st.markdown("""
         div[data-baseweb="input"], .stSelectbox div { border-radius: 6px !important; }
         div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 6px; padding: 10px; }
         
-        /* Estilo Power BI para os Cards */
+        /* Estilo Power BI para os Cards (Métricas) */
         [data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 800 !important; }
         [data-testid="stMetricLabel"] { font-size: 14px !important; font-weight: 600 !important; color: #64748B !important; }
         div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
@@ -56,14 +58,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM FORÇA DE IDENTIDADE (CORREÇÃO DE NOME)
+# 3. AUTENTICAÇÃO COM FORÇA DE IDENTIDADE
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 
-cookie_manager = stx.CookieManager(key="auth_cookies_v5")
+cookie_manager = stx.CookieManager(key="auth_cookies_v6")
 cookies = cookie_manager.get_all()
 
+# Lê os cookies e preenche os dados do utilizador
 if st.session_state.user_email is None and cookies and "u_mail" in cookies and cookies["u_mail"]:
     st.session_state.user_email = cookies["u_mail"]
     # FORÇA A BUSCA DO NOME REAL NO SUPABASE
@@ -74,6 +77,7 @@ if st.session_state.user_email is None and cookies and "u_mail" in cookies and c
     except:
         st.session_state.user_nome = cookies.get("u_name", "Usuário")
 
+# Tela de Login se não estiver autenticado
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -89,8 +93,9 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
-                        cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
-                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
+                        cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60, key="login_mail")
+                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60, key="login_name")
+                        time.sleep(0.5)
                         st.rerun()
                     except Exception as e: st.error(f"Erro no login: {e}")
             with aba_registro:
@@ -106,7 +111,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA (CADASTROS RESGATADOS)
+# 4. GESTÃO DE MASTER DATA (CADASTROS BASE)
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
@@ -117,6 +122,7 @@ LISTA_ORIG_BASE = ["Supermercado", "Pix", "Empresa", "Cliente"]
 
 @st.cache_data(ttl=5)
 def carregar_dados_completos(email):
+    # Puxa os dados e normaliza a coluna mes_pagamento
     try:
         res = supabase.table("lancamentos").select("*").eq("user_email", email).execute()
         if res.data:
@@ -129,17 +135,16 @@ def carregar_dados_completos(email):
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
+# Separação Inteligente: Lançamentos Reais vs Configurações
 df_tudo = carregar_dados_completos(st.session_state.user_email)
 df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
 def obter_opcoes(coluna, lista_base):
-    # Pega cadastros configurados
+    # Motor que junta cadastros salvos, lançamentos passados e remove a lista negra
     configs = df_configs[df_configs["Tipo"] == f"Config_{coluna}"][coluna].dropna().astype(str).unique().tolist() if not df_configs.empty and coluna in df_configs.columns else []
-    # Pega itens de lançamentos passados
     existentes = df[coluna].dropna().astype(str).unique().tolist() if not df.empty and coluna in df.columns else []
-    # Pega lista negra
     ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
     
     todos = set(lista_base + configs + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
@@ -148,16 +153,19 @@ def obter_opcoes(coluna, lista_base):
     return sorted(list(todos))
 
 # ========================================================
-# 5. HEADER (PADRÃO PROFISSIONAL)
+# 5. HEADER (PADRÃO PROFISSIONAL E LOGOUT CORRIGIDO)
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.markdown(f"<div style='text-align: right; padding-top: 15px;'><span style='font-size:18px;'>👤 Olá, <b>{st.session_state.user_nome}</b></span></div>", unsafe_allow_html=True)
+    
+    # 🔥 CORREÇÃO: Função de Logout blindada com Keys Únicas 🔥
     if st.button("Sair (Logout)", use_container_width=True):
-        cookie_manager.set("u_mail", "", max_age=-1)
-        cookie_manager.set("u_name", "", max_age=-1)
+        cookie_manager.delete("u_mail", key="logout_del_mail")
+        cookie_manager.delete("u_name", key="logout_del_name")
         st.session_state.clear()
+        time.sleep(0.5) # Aguarda os componentes invisíveis concluírem a exclusão
         st.rerun()
 
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Visão BI & Gorila", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
@@ -192,7 +200,7 @@ with aba_dashboard:
             saldo = t_rec - t_desp
             
             st.markdown("<br>", unsafe_allow_html=True)
-            # UTILIZANDO OS CARDS NATIVOS ESTILO POWER BI
+            # Cards de KPI (Power BI Style)
             cm1, cm2, cm3, cm4 = st.columns(4)
             cm1.metric(label="Saldo do Período", value=f"R$ {saldo:,.2f}", delta="Lucro" if saldo >= 0 else "Prejuízo", delta_color="normal")
             cm2.metric(label="Total Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas Líquidas")
@@ -251,9 +259,10 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES (A MAGIA DE MERCADO)
+# 7. LANÇAMENTOS INTELIGENTES E MUTANTES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor):
+    # Salva opções no banco automaticamente
     try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
     except: pass
 
@@ -317,6 +326,7 @@ with aba_lancamentos:
                     cat_sel = st.selectbox("Tipo de Receita", obter_opcoes("Categoria", LISTA_CAT_REC) + ["➕ Nova..."])
                     categoria = st.text_input("Nova Receita:") if cat_sel == "➕ Nova..." else cat_sel
                 with c5:
+                    # Ticker apenas para receitas financeiras
                     if "Dividendos" in categoria or "JCP" in categoria or "Rendimentos" in categoria:
                         ativo_ticker = st.text_input("Ticker que pagou (Ex: MXRF11)").upper()
                         orig_sel = "Bolsa / B3"
@@ -333,15 +343,18 @@ with aba_lancamentos:
                 with c7: desc_resumo = st.text_input("Descrição (Ex: Salário, Venda Projeto X)")
                 with c8: resp_principal = st.selectbox("Titular da Receita", obter_opcoes("Responsavel", LISTA_RESP_BASE))
                 
-                # Receita NÃO TEM frequência de parcelas nem fatura.
-                status_final = st.radio("O dinheiro já está na conta?", ["Sim (Recebido/Pago)", "Ainda não (A Receber)"], horizontal=True)
-                status_final = "Pago" if "Sim" in status_final else "Pendente"
-                tipo_frequencia = "Único"
-                parcelas = 1
+                st.markdown("##### 📅 Status da Entrada")
+                cr1, cr2 = st.columns(2)
+                with cr1:
+                    status_vis = st.radio("O dinheiro já está na conta?", ["Sim (Recebido/Pago)", "Ainda não (A Receber)"], horizontal=True)
+                    status_final = "Pago" if "Sim" in status_vis else "Pendente"
+                with cr2:
+                    tipo_frequencia = "Único"
+                    parcelas = 1
                 
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
-                ano_comp = ano_pag = 2026 
-                mes_comp = mes_pag = meses_nomes[datetime.now().month - 1]
+                ano_comp = ano_pag = data_ocorreu.year 
+                mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
                 subcategoria = "Geral"
 
             # ----------------------------------------------------
@@ -367,20 +380,21 @@ with aba_lancamentos:
                     desc_resumo = f"Aporte em {ativo_ticker}" if ativo_ticker else "Aporte de Investimento"
                     resp_principal = st.selectbox("Titular da Conta", obter_opcoes("Responsavel", LISTA_RESP_BASE))
                     
-                # Investimento NÃO TEM pendência ou parcelas. 
                 tipo_frequencia = "Único"
                 parcelas = 1
-                status_final = "Pago" 
+                status_final = "Pago" # Executado
                 
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
-                ano_comp = ano_pag = 2026
-                mes_comp = mes_pag = meses_nomes[datetime.now().month - 1]
+                ano_comp = ano_pag = data_ocorreu.year
+                mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and responsavel:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                if orig_sel == "➕ Novo..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
+                if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
+                if orig_sel == "➕ Novo Pagador..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
+                if orig_sel == "➕ Nova..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 
                 if ativo_ticker and tipo_mov == "Receita": desc_resumo = f"[{ativo_ticker}] {desc_resumo}"
 
@@ -418,37 +432,62 @@ with aba_lancamentos:
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
-    st.write("Veja todas as opções salvas no seu histórico. Apagar daqui não afeta os gráficos.")
+    st.write("Aqui você visualiza, adiciona ou esconde opções do seu sistema. Os dados do seu histórico financeiro NUNCA somem.")
     
-    col_dict = {"Categorias (Classes)": "Categoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
+    col_dict = {"Contas e Cartões": "Cartao", "Categorias Gerais": "Categoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
     tipo_cadastro = st.selectbox("Selecione a lista para gerenciar:", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
     
-    # Busca 100% de tudo o que existe no banco para aquele usuário
-    opcoes_atuais = obter_opcoes(col_db, LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV if col_db=="Categoria" else (LISTA_RESP_BASE if col_db=="Responsavel" else LISTA_ORIG_BASE))
-    
-    c_cad1, c_cad2 = st.columns(2)
-    with c_cad1:
+    if col_db == "Cartao":
         with st.container(border=True):
-            st.markdown(f"#### ➕ Forçar Novo Cadastro")
-            novo_item = st.text_input(f"Digitar novo(a) {tipo_cadastro}")
-            if st.button("Salvar na Lista") and novo_item:
-                auto_salvar_cadastro(col_db, novo_item)
-                st.success("Salvo!")
-                time.sleep(1)
+            st.markdown("#### Adicionar Cartão / Conta")
+            c1, c2, c3 = st.columns(3)
+            with c1: banco_cartao = st.selectbox("Banco", LISTA_BANC_BASE)
+            with c2: final_cartao = st.text_input("Nome/Final (Ex: Final 1234, Conta Empresa)")
+            with c3: dia_vencimento = st.number_input("Dia de Vencimento da Fatura (1 para contas)", 1, 31, 10)
+            if st.button("Salvar Cartão", type="primary") and final_cartao:
+                auto_salvar_cadastro("Cartao", f"{banco_cartao} - {final_cartao} (Venc: dia {dia_vencimento})")
                 st.rerun()
                 
-    with c_cad2:
-        with st.container(border=True):
-            st.markdown(f"#### 🗑️ Ocultar do Formulário")
-            if opcoes_atuais:
-                item_apagar = st.selectbox("Selecione para colocar na Lista Negra:", opcoes_atuais)
-                if st.button("Esconder Item"):
-                    supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": "Config_Excluida", "categoria": col_db, "subcategoria": item_apagar, "responsavel": st.session_state.user_nome, "origem_destino": "", "conta_cartao": "", "valor": 0.0, "descricao": "Oculto", "parcela": "-", "status": "Config"}).execute()
-                    st.success("Item Ocultado!")
+        st.markdown("#### Seus Cartões e Contas Registados")
+        if not df_cartoes.empty:
+            df_cv = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].rename(columns={"Conta_Cartao": "Conta / Cartão", "Categoria": "Banco", "Valor": "Vencimento"})
+            st.dataframe(df_cv.drop(columns=["ID"]), use_container_width=True, hide_index=True)
+            cartao_apagar = st.selectbox("Selecione para remover:", df_cv["Conta / Cartão"].tolist())
+            if st.button("Remover Selecionado"):
+                id_rem = df_cartoes[df_cartoes["Conta_Cartao"] == cartao_apagar]["ID"].iloc[0]
+                supabase.table("lancamentos").delete().eq("id", id_rem).execute()
+                st.rerun()
+    else:
+        # Busca 100% de tudo o que existe no banco para garantir que nada some
+        if col_db == "Categoria": lista_padrao = LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV
+        elif col_db == "Responsavel": lista_padrao = LISTA_RESP_BASE
+        else: lista_padrao = LISTA_ORIG_BASE
+        
+        opcoes_atuais = obter_opcoes(col_db, lista_padrao)
+        
+        c_cad1, c_cad2 = st.columns(2)
+        with c_cad1:
+            with st.container(border=True):
+                st.markdown(f"#### ➕ Forçar Novo Cadastro")
+                novo_item = st.text_input(f"Digitar novo(a) {tipo_cadastro}")
+                if st.button("Salvar na Lista") and novo_item:
+                    auto_salvar_cadastro(col_db, novo_item)
+                    st.success("Salvo!")
                     time.sleep(1)
                     st.rerun()
-            else: st.write("Nenhum item encontrado.")
+                    
+        with c_cad2:
+            with st.container(border=True):
+                st.markdown(f"#### 🗑️ Ocultar do Formulário")
+                st.write("Retira o item da lista de opções futuras, mas não afeta o histórico financeiro passado.")
+                if opcoes_atuais:
+                    item_apagar = st.selectbox("Selecione para colocar na Lista Negra:", opcoes_atuais)
+                    if st.button("Esconder Item"):
+                        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": "Config_Excluida", "categoria": col_db, "subcategoria": item_apagar, "responsavel": st.session_state.user_nome, "origem_destino": "", "conta_cartao": "", "valor": 0.0, "descricao": "Oculto", "parcela": "-", "status": "Config"}).execute()
+                        st.success("Item Ocultado!")
+                        time.sleep(1)
+                        st.rerun()
 
 # ========================================================
 # 9. ASSISTENTE IA
@@ -461,6 +500,6 @@ with aba_assistente:
             with st.chat_message("user"): st.markdown(prompt)
             try:
                 hist_txt = df[["Data", "Tipo", "Categoria", "Valor"]].to_string() if not df.empty else "Vazio."
-                resposta = modelo_ia.generate_content(f"Dados:\n{hist_txt}\nPergunta: {prompt}")
-                with st.chat_message("assistant"): st.markdown(resposta.text)
+                res = modelo_ia.generate_content(f"Dados:\n{hist_txt}\nPergunta: {prompt}")
+                with st.chat_message("assistant"): st.markdown(res.text)
             except Exception as e: st.error(f"Erro IA: {e}")
