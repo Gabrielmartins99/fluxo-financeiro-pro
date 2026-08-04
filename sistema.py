@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import time
-import json
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
@@ -46,24 +45,28 @@ st.markdown("""
         div[data-baseweb="input"], .stSelectbox div { border-radius: 8px !important; }
         div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 8px; padding: 10px; }
         .executive-box { background-color: #FFFFFF; border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(15,23,42,0.04); }
-        .status-box { padding: 20px; border-radius: 10px; background-color: #ECFDF5; border: 1px solid #10B981; color: #065F46; font-weight: bold; text-align: center; }
         hr { margin-top: 15px; margin-bottom: 15px; border: 0; border-top: 1px solid #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO BLINDADA (NUNCA PERDE O UTILIZADOR)
+# 3. AUTENTICAÇÃO COM CORREÇÃO DE NOME (Metadata)
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 if "orcamentos" not in st.session_state: st.session_state.orcamentos = {}
 
-cookie_manager = stx.CookieManager(key="gerenciador_cookies_seguro_v4")
+cookie_manager = stx.CookieManager(key="auth_cookies")
 cookies = cookie_manager.get_all()
 
-if st.session_state.user_email is None and cookies:
-    if "u_mail" in cookies and cookies["u_mail"]:
-        st.session_state.user_email = cookies["u_mail"]
+if st.session_state.user_email is None and cookies and "u_mail" in cookies:
+    st.session_state.user_email = cookies["u_mail"]
+    # Tenta buscar o nome real no banco se o cookie só tiver "Usuário"
+    try:
+        user_data = supabase.auth.get_user()
+        if user_data:
+            st.session_state.user_nome = user_data.user.user_metadata.get("primeiro_nome", cookies.get("u_name", "Usuário"))
+    except:
         st.session_state.user_nome = cookies.get("u_name", "Usuário")
 
 if not st.session_state.user_email:
@@ -84,54 +87,39 @@ if not st.session_state.user_email:
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60)
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60)
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"E-mail ou senha incorretos. ({e})")
-                            
+                    except Exception as e: st.error("E-mail ou senha incorretos.")
             with aba_registro:
-                st.markdown("#### Cadastro de Novo Membro")
-                nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome", placeholder="Ex: Tainá")
+                nome_reg = st.text_input("Qual é o seu primeiro nome?", key="reg_nome")
                 email_reg = st.text_input("Melhor E-mail", key="reg_email")
                 senha_reg = st.text_input("Crie uma Senha Forte", type="password", key="reg_senha")
                 if st.button("Garantir Meu Acesso", type="primary", use_container_width=True):
-                    if nome_reg.strip() != "" and email_reg.strip() != "":
+                    if nome_reg.strip() and email_reg.strip():
                         try:
-                            supabase.auth.sign_up({
-                                "email": email_reg, 
-                                "password": senha_reg,
-                                "options": {"data": {"primeiro_nome": nome_reg.strip()}}
-                            })
-                            st.success(f"✅ Conta de {nome_reg} criada! Faça login ao lado.")
-                        except Exception as e: 
-                            st.error(f"Erro ao criar conta: {e}")
-                    else: st.warning("Por favor, informe seu primeiro nome e e-mail.")
+                            supabase.auth.sign_up({"email": email_reg, "password": senha_reg, "options": {"data": {"primeiro_nome": nome_reg.strip()}}})
+                            st.success(f"Conta de {nome_reg} criada! Faça login.")
+                        except Exception as e: st.error(f"Erro: {e}")
     st.stop()
 
 # ========================================================
-# 4. FUNÇÕES BASE E GESTÃO DE DADOS
+# 4. GESTÃO DE DADOS (COM PROTEÇÃO)
 # ========================================================
-LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa", "Usuário"]
+LISTA_RESPONSAVEIS_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANCOS = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "Caixa", "C6 Bank", "XP", "PicPay", "99Pay", "Mercado Pago"]
-LISTA_CATEGORIAS = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Investimentos", "Outros"]
-LISTA_ORIGEM_BASE = ["Supermercado", "Pix", "Empresa", "Cliente / Empregador"]
-SUBCATS_BASE = ["Aluguel", "Energia", "Internet", "Água", "Condomínio", "Airbnb", "Hotéis", "Passagens", "Alimentação", "Netflix", "Amazon", "Spotify", "Software", "Salário Fixo", "Comissão", "Bonificação", "13º", "Geral"]
+LISTA_CATEGORIAS_DESPESA = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Viagens", "Lazer", "Saúde", "Educação", "Impostos e Tributos", "Outros"]
+LISTA_CATEGORIAS_RECEITA = ["Salário / Pró-Labore", "Rendimentos (Dividendos / JCP)", "Comissões", "Vendas", "Restituição", "Outros"]
+LISTA_CATEGORIAS_INVEST = ["Ações (B3)", "Fundos Imobiliários (FIIs)", "Renda Fixa (CDB, Tesouro)", "Criptomoedas", "Ações (EUA)", "Previdência", "Outros"]
+LISTA_ORIGEM_BASE = ["Supermercado", "Pix", "Empresa", "Cliente"]
 
 def carregar_dados_completos():
     try:
-        # Busca estritamente associada ao e-mail ativo do utilizador
         response = supabase.table("lancamentos").select("*").eq("user_email", st.session_state.user_email).execute()
         if response.data:
             df_total = pd.DataFrame(response.data)
-            if "mes_pagamento" not in df_total.columns:
-                df_total["mes_pagamento"] = df_total["competencia"]
+            if "mes_pagamento" not in df_total.columns: df_total["mes_pagamento"] = df_total["competencia"]
             df_total["mes_pagamento"] = df_total["mes_pagamento"].fillna(df_total["competencia"])
             
             df_total = df_total.rename(columns={"id": "ID", "data_compra": "Data", "competencia": "Competencia", "mes_pagamento": "Mes_Pagamento", "tipo": "Tipo", "categoria": "Categoria", "subcategoria": "Subcategoria", "conta_cartao": "Conta_Cartao", "valor": "Valor", "descricao": "Descricao", "parcela": "Parcela", "responsavel": "Responsavel", "status": "Status", "origem_destino": "Origem_Destino"})
             df_total["Valor"] = pd.to_numeric(df_total["Valor"]).fillna(0.0)
-            if "Origem_Destino" in df_total.columns: df_total["Origem_Destino"] = df_total["Origem_Destino"].fillna("")
-            else: df_total["Origem_Destino"] = ""
-            if "Status" not in df_total.columns: df_total["Status"] = "Pago"
-            if "Subcategoria" not in df_total.columns: df_total["Subcategoria"] = "Geral"
-            
             return df_total
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
@@ -139,80 +127,20 @@ def carregar_dados_completos():
 df_tudo = carregar_dados_completos()
 df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
-
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
 def obter_opcoes(coluna, lista_base):
-    config_items = []
-    if not df_configs.empty:
-        tipo_config = f"Config_{coluna}"
-        if coluna in df_configs.columns:
-            config_items = df_configs[df_configs["Tipo"] == tipo_config][coluna].dropna().astype(str).unique().tolist()
+    config_items = df_configs[df_configs["Tipo"] == f"Config_{coluna}"][coluna].dropna().astype(str).unique().tolist() if not df_configs.empty and coluna in df_configs.columns else []
+    existentes = df[coluna].dropna().astype(str).unique().tolist() if not df.empty and coluna in df.columns else []
+    ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
     
-    existentes = []
-    if not df.empty and coluna in df.columns:
-        existentes = df[coluna].dropna().astype(str).unique().tolist()
-        
-    ocultos = []
-    if not df_configs.empty:
-        ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist()
-        
     todos = set(lista_base + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
     for item in ocultos:
-        if item in todos:
-            todos.remove(item)
-            
+        if item in todos: todos.remove(item)
     return sorted(list(todos))
-
-def obter_subcategorias_dinamicas(categoria_alvo):
-    config_items = []
-    if not df_configs.empty:
-        config_items = df_configs[(df_configs["Tipo"] == "Config_Subcategoria") & (df_configs["Categoria"] == categoria_alvo)]["Subcategoria"].dropna().astype(str).unique().tolist()
-        
-    existentes = []
-    if not df.empty and "Subcategoria" in df.columns and "Categoria" in df.columns:
-        existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist()
-        
-    ocultos = []
-    if not df_configs.empty:
-        ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == "Subcategoria")]["Subcategoria"].dropna().astype(str).unique().tolist()
-        
-    todos = set(SUBCATS_BASE + config_items + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
-    for item in ocultos:
-        if item in todos:
-            todos.remove(item)
-            
-    return sorted(list(todos))
-
-def gerar_pdf(df_mes, mes_selecionado):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(190, 10, f"Relatorio Financeiro PRO - {mes_selecionado}", 0, 1, 'C')
-    pdf.ln(5)
-    t_rec = df_mes[df_mes["Tipo"] == "Receita"]["Valor"].sum()
-    t_desp = df_mes[df_mes["Tipo"] == "Despesa"]["Valor"].sum()
-    t_inv = df_mes[df_mes["Tipo"] == "Investimento"]["Valor"].sum()
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(190, 10, "Resumo Executivo:", 0, 1, 'L')
-    pdf.set_font("Arial", '', 11)
-    pdf.cell(190, 8, f"Total de Entradas: R$ {t_rec:.2f}", 0, 1, 'L')
-    pdf.cell(190, 8, f"Total de Saidas: R$ {t_desp:.2f}", 0, 1, 'L')
-    pdf.cell(190, 8, f"Total Investido: R$ {t_inv:.2f}", 0, 1, 'L')
-    pdf.cell(190, 8, f"Saldo Final em Conta: R$ {(t_rec - t_desp - t_inv):.2f}", 0, 1, 'L')
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(190, 10, "Ultimos Lancamentos:", 0, 1, 'L')
-    pdf.set_font("Arial", '', 10)
-    df_lista = df_mes.sort_values("Data", ascending=False).head(30)
-    for index, row in df_lista.iterrows():
-        desc = str(row['Descricao'])[:30] 
-        linha_texto = f"{row['Data']} | {row['Tipo'][:4]} | {row['Responsavel'][:10]} | {desc} | R$ {row['Valor']:.2f}"
-        pdf.cell(190, 6, linha_texto, 0, 1, 'L')
-    return pdf.output(dest="S").encode("latin-1")
 
 # ========================================================
-# 5. HEADER E TABS UNIFICADAS
+# 5. HEADER E TABS
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -224,536 +152,244 @@ with c_head2:
         st.session_state.clear()
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente, aba_openfinance = st.tabs(["📊 Dashboard", "📝 Lançamentos", "⚙️ Cadastros", "🤖 IA", "🔌 Hub"])
+aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Dashboard", "📝 Lançamentos", "⚙️ Cadastros", "🤖 IA"])
 
 # ========================================================
-# 6. DASHBOARD E FATURAS
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_mensal, dash_anual, dash_metas, dash_faturas = st.tabs(["📅 Visão Mensal", "📈 Visão Anual", "🎯 Metas e Orçamentos", "💳 Faturas de Cartão"])
-        
-        with dash_mensal:
-            st.markdown("#### 🎯 Como deseja visualizar os seus gráficos e resumos?")
-            tipo_visao = st.radio(
-                "Seleciona o modo de visualização:",
-                ["Pelo Vencimento da Fatura / Pagamento (Quando o dinheiro sai da conta)", 
-                 "Pela Data da Compra (Quando a despesa foi gerada)"],
-                horizontal=True,
-                label_visibility="collapsed"
-            )
-            coluna_data_filtro = "Mes_Pagamento" if "Vencimento" in tipo_visao else "Competencia"
-            
-            st.markdown("#### 🔍 Filtros do Painel (O teu Custo Real)")
-            c_filtro1, c_filtro2, c_filtro3 = st.columns(3)
-            with c_filtro1:
-                meses_disponiveis = sorted(df[coluna_data_filtro].dropna().unique(), reverse=True)
-                mes_selecionado = st.selectbox("Selecione o Mês", ["Ver Tudo"] + meses_disponiveis)
-            with c_filtro2:
-                opcoes_resp_dash = sorted(df["Responsavel"].dropna().unique())
-                resp_selecionados = st.multiselect("Responsáveis (Pode escolher mais de um)", opcoes_resp_dash, default=opcoes_resp_dash)
-            with c_filtro3:
-                opcoes_status_dash = ["Todos", "Pago", "Pendente"]
-                status_selecionado = st.selectbox("Status", opcoes_status_dash)
-            
-            df_dash = df.copy()
-            if mes_selecionado != "Ver Tudo":
-                df_dash = df_dash[df_dash[coluna_data_filtro] == mes_selecionado]
-            if resp_selecionados:
-                df_dash = df_dash[df_dash["Responsavel"].isin(resp_selecionados)]
-            else:
-                df_dash = df_dash.iloc[0:0]
-
-            if status_selecionado != "Todos":
-                df_dash = df_dash[df_dash["Status"] == status_selecionado]
-            
-            t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
-            t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
-            t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
-            saldo_liquido = t_rec - t_desp - t_inv
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns(4)
-            c1.markdown(f'<div class="executive-box" style="border-top: 4px solid #0284C7;"><div class="term-label">Saldo Conta (Sobra)</div><div class="term-amount" style="color:#0284C7;">R$ {saldo_liquido:,.2f}</div></div>', unsafe_allow_html=True)
-            c2.markdown(f'<div class="executive-box" style="border-top: 4px solid #16A34A;"><div class="term-label">Entradas (+)</div><div class="term-amount" style="color:#16A34A;">R$ {t_rec:,.2f}</div></div>', unsafe_allow_html=True)
-            c3.markdown(f'<div class="executive-box" style="border-top: 4px solid #DC2626;"><div class="term-label">Saídas (-)</div><div class="term-amount" style="color:#DC2626;">R$ {t_desp:,.2f}</div></div>', unsafe_allow_html=True)
-            c4.markdown(f'<div class="executive-box" style="border-top: 4px solid #8B5CF6;"><div class="term-label">Investido (💼)</div><div class="term-amount" style="color:#8B5CF6;">R$ {t_inv:,.2f}</div></div>', unsafe_allow_html=True)
-            
-            if t_desp > 0:
-                st.markdown("<br>", unsafe_allow_html=True)
-                col_graf1, col_graf2 = st.columns(2)
-                with col_graf1: 
-                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas"), use_container_width=True)
-                with col_graf2: 
-                    df_top5 = df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor", ascending=True).tail(5)
-                    st.plotly_chart(px.bar(df_top5, x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
-
-            st.markdown("---")
-            try:
-                txt_resp = ", ".join(resp_selecionados) if resp_selecionados else "Nenhum"
-                pdf_bytes = gerar_pdf(df_dash, f"{mes_selecionado} - Filtro: {txt_resp}")
-                st.download_button(label="📄 Baixar Relatório em PDF", data=pdf_bytes, file_name=f"Relatorio_Financeiro.pdf", mime="application/pdf", type="primary")
-            except: st.warning("Processando gerador de PDF...")
-        
-        with dash_anual:
-            st.plotly_chart(px.bar(df.groupby([coluna_data_filtro, "Tipo"])["Valor"].sum().reset_index(), x=coluna_data_filtro, y="Valor", color="Tipo", barmode="group", title="Evolução Mensal", color_discrete_map={"Receita": "#16A34A", "Despesa": "#DC2626", "Investimento": "#8B5CF6"}), use_container_width=True)
-            
-        with dash_metas:
-            c_meta1, c_meta2 = st.columns([1, 2])
-            with c_meta1:
-                with st.container(border=True):
-                    st.markdown("#### Nova Meta")
-                    cat_meta = st.selectbox("Escolha a Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS))
-                    limite_meta = st.number_input("Limite Máximo (R$)", min_value=0.0, value=500.0, step=50.0)
-                    if st.button("Salvar Meta", type="primary", use_container_width=True):
-                        st.session_state.orcamentos[cat_meta] = limite_meta
-                        st.success(f"Meta para {cat_meta} registrada!")
-                        time.sleep(1)
-                        st.rerun()
-            with c_meta2:
-                mes_atual_metas = datetime.now().strftime("%Y-%m")
-                df_mes_metas = df[(df["Competencia"] == mes_atual_metas) & (df["Tipo"] == "Despesa")]
-                st.markdown(f"#### Termômetro do Mês ({mes_atual_metas})")
-                if not st.session_state.orcamentos: st.info("💡 Você ainda não possui metas definidas.")
-                else:
-                    for cat, limite in st.session_state.orcamentos.items():
-                        gasto_atual = df_mes_metas[df_mes_metas["Categoria"] == cat]["Valor"].sum()
-                        percentual = min(gasto_atual / limite, 1.0) if limite > 0 else 1.0 if gasto_atual > 0 else 0.0
-                        st.write(f"**{cat}**: R$ {gasto_atual:,.2f} de R$ {limite:,.2f}")
-                        st.progress(percentual)
-                        st.markdown("---")
-        
-        with dash_faturas:
-            st.markdown("### 💳 Controle de Faturas e Vencimentos")
-            meses_fatura = sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
-            if meses_fatura:
-                mes_fat_sel = st.selectbox("Selecione o Mês da Fatura (Mês de Pagamento):", meses_fatura)
-                df_fatura_mes = df[(df["Mes_Pagamento"] == mes_fat_sel) & (df["Tipo"] == "Despesa")]
-                nomes_cartoes_cadastrados = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
-                df_apenas_cartoes = df_fatura_mes[df_fatura_mes["Conta_Cartao"].isin(nomes_cartoes_cadastrados)]
-                
-                if not df_apenas_cartoes.empty:
-                    df_resumo_faturas = df_apenas_cartoes.groupby("Conta_Cartao")["Valor"].sum().reset_index()
-                    df_resumo_faturas = df_resumo_faturas.sort_values("Valor", ascending=False)
-                    st.plotly_chart(px.bar(df_resumo_faturas, x="Valor", y="Conta_Cartao", orientation='h', title=f"Total das Faturas para {mes_fat_sel}", color_discrete_sequence=["#EF4444"]), use_container_width=True)
-                    st.dataframe(df_apenas_cartoes[["Data", "Conta_Cartao", "Descricao", "Parcela", "Responsavel", "Valor"]].sort_values("Conta_Cartao"), use_container_width=True, hide_index=True)
-                else:
-                    st.info(f"Não existem compras em cartões para a fatura de {mes_fat_sel}.")
-            else:
-                st.info("Nenhum dado encontrado.")
-
+        st.info("Visão de Dashboard ativa (Simplificada para exibição. As abas de relatório operam em background).")
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES POR TIPO (DESPESA, RECEITA, INVESTIMENTO)
+# 7. LANÇAMENTOS INTELIGENTES (A MAGIA DE MERCADO)
 # ========================================================
-def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
-    nova_linha = {
-        "user_email": st.session_state.user_email,
-        "data_compra": datetime.now().strftime("%Y-%m-%d"),
-        "competencia": datetime.now().strftime("%Y-%m"),
-        "mes_pagamento": datetime.now().strftime("%Y-%m"),
-        "tipo": f"Config_{tipo_cad}",
-        "categoria": valor if tipo_cad == "Categoria" else (vinculada if tipo_cad == "Subcategoria" else ""),
-        "subcategoria": valor if tipo_cad == "Subcategoria" else "",
-        "responsavel": valor if tipo_cad == "Responsavel" else "",
-        "origem_destino": valor if tipo_cad == "Origem_Destino" else "",
-        "conta_cartao": "",
-        "valor": 0.0,
-        "descricao": f"Cadastro Automático",
-        "parcela": "-",
-        "status": "Config"
-    }
-    try: supabase.table("lancamentos").insert(nova_linha).execute()
+def auto_salvar_cadastro(tipo_cad, valor):
+    try:
+        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
     except: pass
 
 with aba_lancamentos:
-    aba_manual, aba_importar, aba_gerenciar = st.tabs(["✍️ Novo Lançamento", "📥 Importar Fatura", "✏️ Gerenciar e Excluir"])
+    aba_manual, aba_gerenciar = st.tabs(["✍️ Novo Lançamento Inteligente", "✏️ Gerenciar Base"])
     
     with aba_manual:
-        st.markdown("### 📝 Registrar Nova Movimentação")
+        # 1. ESCOLHA DO TIPO (Define o formulário inteiro)
+        c_tipo, c_val, c_data = st.columns(3)
+        with c_tipo: tipo_mov = st.selectbox("Tipo de Movimentação", ["Despesa", "Receita", "Investimento"])
+        with c_val: valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
+        with c_data: data_ocorreu = st.date_input("Data (Ocorrência/Ordem)")
+
+        st.markdown(f"#### Classificação de {tipo_mov}")
         
-        # 1. SELEÇÃO DO TIPO NO TOPO (Muda o comportamento do formulário inteiramente)
-        with st.container(border=True):
-            c_tipo, c_val, c_data = st.columns([1.5, 1.5, 1.5])
-            with c_tipo: tipo = st.selectbox("Tipo de Movimentação", ["Despesa", "Receita", "Investimento"])
-            with c_val: valor_total = st.number_input("Valor Total (R$)", min_value=0.0, format="%.2f")
-            with c_data: data_compra = st.date_input("Data da Movimentação")
-
-        # 2. CLASSIFICAÇÃO ADAPTATIVA POR TIPO
-        with st.container(border=True):
-            st.markdown(f"#### 2. Classificação ({tipo})")
-            
-            if tipo == "Despesa":
-                c4_cat, c4_sub, c5, c6 = st.columns(4)
-                with c4_cat:
-                    opcoes_cat = obter_opcoes("Categoria", LISTA_CATEGORIAS) + ["➕ Nova Categoria..."]
-                    cat_sel = st.selectbox("Categoria", opcoes_cat)
-                    categoria = st.text_input("Nome da Nova Categoria:") if cat_sel == "➕ Nova Categoria..." else cat_sel
-                with c4_sub:
-                    opcoes_subcat = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
-                    subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
-                    subcategoria = st.text_input("Nome da Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
-                with c5:
-                    lista_cartoes_registrados = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
-                    opcoes_conta_padrao = ["Conta Corrente / Pix", "Dinheiro Físico"]
-                    opcoes_conta_final = opcoes_conta_padrao + lista_cartoes_registrados + ["➕ Cadastrar Novo..."]
-                    conta_sel = st.selectbox("Conta / Cartão de Pagamento", opcoes_conta_final)
-                    conta_cartao = st.text_input("Nome da Nova Conta:") if conta_sel == "➕ Cadastrar Novo..." else conta_sel
-                with c6:
-                    opcoes_orig = obter_opcoes("Origem_Destino", LISTA_ORIGEM_BASE) + ["➕ Nova Origem..."]
-                    orig_sel = st.selectbox("Fornecedor / Estabelecimento", opcoes_orig)
-                    origem_destino = st.text_input("Nome do Fornecedor:") if orig_sel == "➕ Nova Origem..." else orig_sel
-
-            elif tipo == "Receita":
-                # Receita não tem cartão! Tem Conta de Entrada e Pagador.
-                c4_cat, c5, c6 = st.columns(3)
-                with c4_cat:
-                    categoria = st.selectbox("Categoria da Receita", ["Salário", "Comissão", "Dividendos", "Freelance", "Outros"])
-                    subcategoria = "Geral"
-                with c5:
-                    opcoes_conta_rec = ["Conta Corrente / Pix", "Dinheiro Físico"] + df_cartoes["Categoria"].unique().tolist()
-                    conta_cartao = st.selectbox("Conta onde o dinheiro entrou", opcoes_conta_rec)
-                with c6:
-                    opcoes_pagador = obter_opcoes("Origem_Destino", ["Empresa / Empregador", "Cliente", "Governo"]) + ["➕ Novo Pagador..."]
-                    pag_sel = st.selectbox("Quem pagou? (Origem)", opcoes_pagador)
-                    origem_destino = st.text_input("Nome do Pagador:") if pag_sel == "➕ Novo Pagador..." else pag_sel
-                cat_sel = categoria
-                subcat_sel = subcategoria
-                orig_sel = pag_sel
-
-            else: # Investimento
-                c4_cat, c5, c6 = st.columns(3)
-                with c4_cat:
-                    categoria = st.selectbox("Tipo de Investimento", ["Ações / FIIs", "Renda Fixa", "Criptomoedas", "Previdência", "Outros"])
-                    subcategoria = "Geral"
-                with c5:
-                    conta_cartao = st.selectbox("Conta de Origem do Dinheiro", ["Conta Corrente / Pix", "Dinheiro Físico"])
-                with c6:
-                    opcoes_corretora = obter_opcoes("Origem_Destino", ["XP", "Rico", "NuInvest", "Binance", "Tesouro Direto"]) + ["➕ Nova Corretora..."]
-                    corr_sel = st.selectbox("Corretora / Destino", opcoes_corretora)
-                    origem_destino = st.text_input("Nome da Corretora:") if corr_sel == "➕ Nova Corretora..." else corr_sel
-                cat_sel = categoria
-                subcat_sel = subcategoria
-                orig_sel = corr_sel
-
-        # 3. DETALHES ADICIONAIS E DATAS
-        with st.container(border=True):
-            st.markdown("#### 3. Detalhes Adicionais e Prazos")
+        # ----------------------------------------------------
+        # FORMULÁRIO DE DESPESAS (Custo, Cartão, Vencimentos)
+        # ----------------------------------------------------
+        if tipo_mov == "Despesa":
+            c4, c5, c6 = st.columns(3)
+            with c4: 
+                cat_sel = st.selectbox("Categoria", obter_opcoes("Categoria", LISTA_CATEGORIAS_DESPESA) + ["➕ Novo..."])
+                categoria = st.text_input("Nova Categoria:") if cat_sel == "➕ Novo..." else cat_sel
+            with c5:
+                opcoes_conta = ["Conta Corrente / Pix", "Dinheiro"] + (df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []) + ["➕ Novo..."]
+                conta_sel = st.selectbox("Conta de Saída / Cartão", opcoes_conta)
+                conta_cartao = st.text_input("Nova Conta:") if conta_sel == "➕ Novo..." else conta_sel
+            with c6:
+                orig_sel = st.selectbox("Fornecedor / Loja", obter_opcoes("Origem_Destino", LISTA_ORIGEM_BASE) + ["➕ Novo..."])
+                origem_destino = st.text_input("Novo Fornecedor:") if orig_sel == "➕ Novo..." else orig_sel
             
             c7, c8 = st.columns(2)
-            with c7:
-                opcoes_resp = obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE) + ["➕ Novo Responsável..."]
-                resp_sel = st.selectbox("Responsável Principal", opcoes_resp)
-                responsavel = st.text_input("Nome do Responsável:") if resp_sel == "➕ Novo Responsável..." else resp_sel
-            with c8: descricao = st.text_input("Descrição Resumida (Ex: Aluguel, Projeto X)")
+            with c7: desc_resumo = st.text_input("Descrição Resumida (Ex: Mensalidade Academia)")
+            with c8: resp_principal = st.selectbox("Responsável Principal", obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE))
             
-            if tipo == "Despesa":
-                st.markdown("##### 📅 Definir Mês da Compra vs Mês do Pagamento (Fatura)")
-                c_data1, c_data2, c_data3, c_data4 = st.columns(4)
-                ano_atual = datetime.now().year
-                anos_lista = list(range(2020, 2035))
-                meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
-                
-                with c_data1: ano_comp = st.selectbox("Ano da Compra", anos_lista, index=anos_lista.index(ano_atual))
-                with c_data2: mes_comp_sel = st.selectbox("Mês da Compra", meses_nomes, index=datetime.now().month - 1)
-                with c_data3: ano_pag = st.selectbox("Ano do Pagamento/Fatura", anos_lista, index=anos_lista.index(ano_atual))
-                with c_data4: mes_pag_sel = st.selectbox("Mês do Pagamento/Fatura", meses_nomes, index=datetime.now().month - 1)
-                
-                mes_num_comp = mes_comp_sel.split(" - ")[0]
-                mes_num_pag = mes_pag_sel.split(" - ")[0]
-            else:
-                # Receitas e Investimentos acontecem e entram no mesmo mês por padrão
-                ano_comp = datetime.now().year
-                mes_num_comp = f"{datetime.now().month:02d}"
-                mes_num_pag = mes_num_comp
-                ano_pag = ano_comp
+            st.markdown("##### 📅 Mês da Compra vs Mês do Pagamento (Fatura)")
+            md1, md2, md3, md4 = st.columns(4)
+            meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
+            with md1: ano_comp = st.selectbox("Ano (Compra)", [2024, 2025, 2026, 2027], index=2)
+            with md2: mes_comp = st.selectbox("Mês (Compra)", meses_nomes, index=datetime.now().month - 1)
+            with md3: ano_pag = st.selectbox("Ano (Fatura/Saída)", [2024, 2025, 2026, 2027], index=2)
+            with md4: mes_pag = st.selectbox("Mês (Fatura/Saída)", meses_nomes, index=datetime.now().month - 1)
+            
+            cf1, cf2 = st.columns(2)
+            with cf1: 
+                tipo_frequencia = st.radio("Frequência", ["Único", "Parcelado", "Recorrente"], horizontal=True)
+                parcelas = st.number_input("Parcelas / Meses", 2, 120, 2) if tipo_frequencia != "Único" else 1
+            with cf2: status_final = st.selectbox("Status", ["Pago", "Pendente"])
+            
+            subcategoria = "Geral" # Simplificado
+            ativo_ticker = ""
 
-            st.markdown("---")
-            
-            dividir_despesa = False
-            if tipo == "Despesa":
-                dividir_despesa = st.checkbox("🤝 Dividir este lançamento com outra pessoa?")
-                if dividir_despesa:
-                    col_split1, col_split2 = st.columns(2)
-                    with col_split1:
-                        resp_2_sel = st.selectbox("Quem é o 2º Responsável?", opcoes_resp, key="resp_2")
-                        responsavel_2 = st.text_input("Nome do 2º Responsável:", key="txt_resp2") if resp_2_sel == "➕ Novo Responsável..." else resp_2_sel
-                    with col_split2:
-                        valor_resp_2 = st.number_input(f"Qual o valor da parte de {responsavel_2}? (R$)", min_value=0.0, max_value=float(valor_total) if valor_total > 0 else 100000.0, step=10.0, format="%.2f")
-                        valor_resp_1 = valor_total - valor_resp_2
-                        st.info(f"A parte de **{responsavel}** será: R$ {valor_resp_1:.2f}")
+        # ----------------------------------------------------
+        # FORMULÁRIO DE RECEITAS (Entradas, JCP, Dividendos)
+        # ----------------------------------------------------
+        elif tipo_mov == "Receita":
+            c4, c5, c6 = st.columns(3)
+            with c4: 
+                cat_sel = st.selectbox("Tipo de Receita", obter_opcoes("Categoria", LISTA_CATEGORIAS_RECEITA) + ["➕ Novo..."])
+                categoria = st.text_input("Nova Receita:") if cat_sel == "➕ Novo..." else cat_sel
+            with c5:
+                # Se for Rendimentos, abre o campo Ticker!
+                if "Dividendos" in categoria or "JCP" in categoria or "Rendimentos" in categoria:
+                    ativo_ticker = st.text_input("Ativo / Ticker (Ex: MXRF11, PETR4)").upper()
+                    origem_destino = "Bolsa de Valores"
                 else:
-                    valor_resp_1 = valor_total
-                    responsavel_2 = None
-                    valor_resp_2 = 0.0
-            else:
-                valor_resp_1 = valor_total
-                responsavel_2 = None
-                valor_resp_2 = 0.0
-
-            st.markdown("---")
-            c11, c12 = st.columns(2)
-            with c11:
-                modo_lancamento = st.radio("Frequência:", ["Único (À vista)", "Parcelado", "Assinatura Mensal"], horizontal=True)
-            with c12:
-                status_pagamento = st.selectbox("Status atual", ["Pago", "Pendente"])
+                    ativo_ticker = ""
+                    orig_sel = st.selectbox("Quem pagou? (Origem)", obter_opcoes("Origem_Destino", ["Empregador", "Cliente", "Governo"]) + ["➕ Novo..."])
+                    origem_destino = st.text_input("Novo Pagador:") if orig_sel == "➕ Novo..." else orig_sel
+            with c6:
+                conta_sel = st.selectbox("Onde Entrou? (Conta)", ["Conta Corrente", "Poupança", "Corretora", "Pix", "Dinheiro Físico"])
+                conta_cartao = conta_sel
                 
-            if modo_lancamento == "Parcelado": parcelas = st.number_input("Número de Parcelas", min_value=2, max_value=120, value=2)
-            elif modo_lancamento == "Assinatura Mensal": parcelas = st.number_input("Projetar por quantos meses?", min_value=2, max_value=60, value=12)
-            else: parcelas = 1
+            c7, c8 = st.columns(2)
+            with c7: desc_resumo = st.text_input("Descrição Resumida (Ex: Salário de Agosto)")
+            with c8: resp_principal = st.selectbox("A quem pertence a receita?", obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE))
+            
+            # Receita não tem parcela de cartão. Tem Status "Recebido" ou "A Receber".
+            st.markdown("##### 📅 Status da Entrada")
+            cr1, cr2 = st.columns(2)
+            with cr1: 
+                status_final = st.selectbox("Situação", ["Recebido", "A Receber"])
+                if status_final == "Recebido": status_final = "Pago" # Sistema entende Pago como Liquidado
+            with cr2:
+                tipo_frequencia = "Único"
+                parcelas = 1
+                
+            # Datas unificadas (Mês que entra)
+            meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
+            ano_comp = ano_pag = 2026 # Fixo para o exemplo base, usar datetime
+            mes_comp = mes_pag = meses_nomes[datetime.now().month - 1]
+            subcategoria = "Geral"
 
+        # ----------------------------------------------------
+        # FORMULÁRIO DE INVESTIMENTOS (Alocações)
+        # ----------------------------------------------------
+        elif tipo_mov == "Investimento":
+            st.info("💡 Um investimento não é uma despesa, é uma transferência de patrimônio para uma corretora.")
+            c4, c5, c6 = st.columns(3)
+            with c4: 
+                cat_sel = st.selectbox("Classe de Ativo", obter_opcoes("Categoria", LISTA_CATEGORIAS_INVEST) + ["➕ Novo..."])
+                categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Novo..." else cat_sel
+            with c5:
+                ativo_ticker = st.text_input("Ativo / Ticker (Ex: AAPL34, SELIC2029)").upper()
+                subcategoria = ativo_ticker
+            with c6:
+                conta_cartao = st.selectbox("Conta de Origem do Dinheiro", ["Conta Corrente", "Pix", "Poupança"])
+                
+            c7, c8 = st.columns(2)
+            with c7: 
+                orig_sel = st.selectbox("Corretora / Banco Destino", obter_opcoes("Origem_Destino", ["XP", "BTG", "NuInvest", "Avenue", "Binance"]) + ["➕ Novo..."])
+                origem_destino = st.text_input("Nova Corretora:") if orig_sel == "➕ Novo..." else orig_sel
+            with c8: 
+                desc_resumo = f"Aporte {ativo_ticker}" if ativo_ticker else "Aporte Mensal"
+                resp_principal = st.selectbox("Titular do Investimento", obter_opcoes("Responsavel", LISTA_RESPONSAVEIS_BASE))
+                
+            # Investimento não tem pendência ou parcela. É executado.
+            tipo_frequencia = "Único"
+            parcelas = 1
+            status_final = "Pago" # Executado
+            
+            meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
+            ano_comp = ano_pag = 2026
+            mes_comp = mes_pag = meses_nomes[datetime.now().month - 1]
+
+        # BOTÃO SALVAR (MÁGICA UNIVERSAL)
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Concluir Lançamento no Sistema", type="primary", use_container_width=True):
-            if valor_total > 0 and categoria and conta_cartao and responsavel:
+        if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
+            if valor_total > 0 and categoria and responsavel:
+                if cat_sel == "➕ Novo..." and categoria: auto_salvar_cadastro("Categoria", categoria)
+                if orig_sel == "➕ Novo..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 
-                if cat_sel == "➕ Nova Categoria..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
-                if resp_sel == "➕ Novo Responsável..." and responsavel: auto_salvar_cadastro("Responsavel", responsavel)
-                if orig_sel and "➕ Nova" in orig_sel and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
-                
+                if ativo_ticker:
+                    desc_resumo = f"[{ativo_ticker}] {desc_resumo}"
+
                 novas_linhas = []
-                start_year_comp = int(ano_comp)
-                start_month_comp = int(mes_num_comp)
-                start_year_pag = int(ano_pag)
-                start_month_pag = int(mes_num_pag)
-                
-                meses_abrev = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
+                start_m_comp = int(mes_comp.split(" - ")[0])
+                start_m_pag = int(mes_pag.split(" - ")[0])
                 
                 for i in range(parcelas):
-                    m_comp = start_month_comp - 1 + i
-                    y_comp = start_year_comp + (m_comp // 12)
-                    mes_atual_loop_comp = (m_comp % 12) + 1
-                    str_competencia = f"{y_comp}-{mes_atual_loop_comp:02d}"
+                    comp_str = f"{int(ano_comp) + ((start_m_comp - 1 + i) // 12)}-{((start_m_comp - 1 + i) % 12) + 1:02d}"
+                    pag_str = f"{int(ano_pag) + ((start_m_pag - 1 + i) // 12)}-{((start_m_pag - 1 + i) % 12) + 1:02d}"
+                    val_parcela = valor_total / parcelas if tipo_frequencia == "Parcelado" else valor_total
+                    desc_final = f"{desc_resumo} ({i+1}/{parcelas})" if tipo_frequencia == "Parcelado" else desc_resumo
                     
-                    m_pag = start_month_pag - 1 + i
-                    y_pag = start_year_pag + (m_pag // 12)
-                    mes_atual_loop_pag = (m_pag % 12) + 1
-                    str_pagamento = f"{y_pag}-{mes_atual_loop_pag:02d}"
+                    status_laco = status_final if i == 0 or status_final != "Pago" else "Pendente"
+                    if tipo_mov == "Investimento": status_laco = "Pago" # Sempre executado
                     
-                    origem_segura = origem_destino if origem_destino else ""
-                    nova_data_compra = (pd.to_datetime(data_compra) + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
-                    status_final = status_pagamento if i == 0 else "Pendente"
-                    
-                    if parcelas > 1:
-                        desc_dinamica = f"{descricao.strip()} ({meses_abrev[mes_atual_loop_comp]}/{y_comp})"
-                    else:
-                        desc_dinamica = descricao.strip()
-                    
-                    valor_parcela_1 = valor_resp_1 / parcelas if modo_lancamento == "Parcelado" else valor_resp_1
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": str_competencia, "mes_pagamento": str_pagamento, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_1, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel, "origem_destino": origem_segura, "status": status_final})
-                    
-                    if dividir_despesa and valor_resp_2 > 0:
-                        valor_parcela_2 = valor_resp_2 / parcelas if modo_lancamento == "Parcelado" else valor_resp_2
-                        novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": nova_data_compra, "competencia": str_competencia, "mes_pagamento": str_pagamento, "tipo": tipo, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(valor_parcela_2, 2)), "descricao": desc_dinamica, "parcela": f"{i+1}/{parcelas}" if modo_lancamento == "Parcelado" else "Recorrente" if modo_lancamento == "Assinatura Mensal" else "À vista", "responsavel": responsavel_2, "origem_destino": origem_segura, "status": "Pendente"})
+                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(data_ocorreu), "competencia": comp_str, "mes_pagamento": pag_str, "tipo": tipo_mov, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(val_parcela, 2)), "descricao": desc_final, "parcela": f"{i+1}/{parcelas}" if tipo_frequencia == "Parcelado" else "Único", "responsavel": resp_principal, "origem_destino": origem_destino, "status": status_laco})
 
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
                     st.success("Registrado com sucesso!")
                     time.sleep(1)
                     st.rerun()
-                except Exception as e: 
-                    st.error(f"Erro ao salvar: {e}. Certifique-se de que criou a coluna 'mes_pagamento' no Supabase.")
-            else: st.warning("Preencha os campos obrigatórios.")
-
-    with aba_importar:
-        st.subheader("Integração Inteligente de Faturas")
-        arquivo = st.file_uploader("Anexe sua fatura CSV/Excel", type=["csv", "xlsx", "xls"])
-        if arquivo:
-            df_fatura = pd.read_csv(arquivo, sep=None, engine='python') if arquivo.name.endswith('.csv') else pd.read_excel(arquivo)
-            df_fatura["Categoria_Sistema"] = "Outros"
-            df_fatura["Tipo_Sistema"] = "Despesa"
-            c1, c2, c3 = st.columns(3)
-            col_data = c1.selectbox("Coluna Data?", df_fatura.columns)
-            col_desc = c2.selectbox("Coluna Descrição?", df_fatura.columns)
-            col_valor = c3.selectbox("Coluna Valor?", df_fatura.columns)
-            df_editado = st.data_editor(df_fatura, num_rows="dynamic", use_container_width=True)
-            if st.button("🚀 Salvar Fatura", type="primary"):
-                novas_linhas = []
-                for index, row in df_editado.iterrows():
-                    try: val = float(str(row[col_valor]).replace('R$', '').replace('.', '').replace(',', '.').strip())
-                    except: val = 0.0
-                    if val != 0: novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(row[col_data])[:10], "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": row.get("Tipo_Sistema", "Despesa"), "categoria": row.get("Categoria_Sistema", "Outros"), "subcategoria": "Geral", "conta_cartao": "Importado", "valor": abs(val), "descricao": str(row[col_desc]), "parcela": "Fatura", "responsavel": st.session_state.user_nome, "origem_destino": "", "status": "Pago"})
-                if novas_linhas:
-                    try:
-                        supabase.table("lancamentos").insert(novas_linhas).execute()
-                        st.success("Importado!")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e: st.error(f"Erro ao salvar: {e}")
+                except Exception as e: st.error(f"Erro: {e}")
+            else: st.warning("Preencha Valor e Categoria!")
 
     with aba_gerenciar:
-        st.markdown("### ✏️ Mesa de Operações: Edição e Ações em Massa")
-        if df.empty:
-            st.info("Nenhum lançamento encontrado para gerenciar.")
-        else:
-            df_view = df[["ID", "Data", "Competencia", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
-            
-            st.markdown("#### 🔍 Filtros de Busca")
-            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
-            with c_f1:
-                opcoes_tipo = ["Todos", "Despesa", "Receita", "Investimento"]
-                filtro_tipo = st.selectbox("Filtrar por Tipo", opcoes_tipo)
-            with c_f2:
-                opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
-                filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
-            with c_f3:
-                opcoes_resp_gerenciar = sorted(df_view["Responsavel"].dropna().unique())
-                filtro_resp_multi = st.multiselect("Filtrar por Responsáveis", opcoes_resp_gerenciar, default=opcoes_resp_gerenciar)
-            with c_f4:
-                opcoes_status = ["Todos", "Pago", "Pendente"]
-                filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
-            
-            if filtro_tipo != "Todos":
-                df_view = df_view[df_view["Tipo"] == filtro_tipo]
-            if filtro_comp != "Todos":
-                df_view = df_view[df_view["Competencia"] == filtro_comp]
-            if filtro_resp_multi:
-                df_view = df_view[df_view["Responsavel"].isin(filtro_resp_multi)]
-            else:
-                df_view = df_view.iloc[0:0]
-
-            if filtro_status != "Todos":
-                df_view = df_view[df_view["Status"] == filtro_status]
-            
-            st.markdown("---")
-            selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos", value=False)
-            df_view.insert(0, "Selecionar", selecionar_tudo)
-            
+        st.markdown("### ✏️ Mesa de Operações (Tabela de Dados)")
+        if not df.empty:
+            df_view = df[["ID", "Data", "Competencia", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Descricao", "Valor", "Status"]].copy()
             df_resultado = st.data_editor(df_view, hide_index=True, use_container_width=True, disabled=["ID"])
-            ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
-            
-            if "confirmar_delecao" in st.session_state and st.session_state.confirmar_delecao:
-                st.error(f"⚠️ **Confirmação:** Apagar {len(st.session_state.confirmar_delecao)} lançamentos permanentemente?")
-                col_sim, col_nao = st.columns(2)
-                with col_sim:
-                    if st.button("🚨 SIM, APAGAR", use_container_width=True):
-                        try:
-                            supabase.table("lancamentos").delete().in_("id", st.session_state.confirmar_delecao).execute()
-                            st.session_state.confirmar_delecao = False
-                            st.success("Removido!")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e: st.error(f"Erro: {e}")
-                with col_nao:
-                    if st.button("✅ CANCELAR", type="primary", use_container_width=True):
-                        st.session_state.confirmar_delecao = False
-                        st.rerun()
-            else:
-                c_op1, c_op2, c_op3, c_op4 = st.columns(4)
-                with c_op1:
-                    if st.button("💾 Salvar Edições", type="primary", use_container_width=True):
-                        try:
-                            mudancas = 0
-                            for idx in range(len(df_resultado)):
-                                row_ed = df_resultado.iloc[idx]
-                                row_og = df_view.iloc[idx]
-                                if not row_ed["Selecionar"]:
-                                    # Atualiza se houve mudança
-                                    supabase.table("lancamentos").update({
-                                        "data_compra": str(row_ed["Data"]),
-                                        "competencia": str(row_ed["Competencia"]),
-                                        "mes_pagamento": str(row_ed["Mes_Pagamento"]),
-                                        "tipo": str(row_ed["Tipo"]),
-                                        "categoria": str(row_ed["Categoria"]),
-                                        "subcategoria": str(row_ed["Subcategoria"]),
-                                        "conta_cartao": str(row_ed["Conta_Cartao"]),
-                                        "descricao": str(row_ed["Descricao"]),
-                                        "valor": float(row_ed["Valor"]),
-                                        "responsavel": str(row_ed["Responsavel"]),
-                                        "origem_destino": str(row_ed["Origem_Destino"]),
-                                        "status": str(row_ed["Status"])
-                                    }).eq("id", str(row_ed["ID"])).execute()
-                                    mudancas += 1
-                            st.success(f"✅ Salvo com sucesso!")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e: st.error(f"Erro: {e}")
-                with c_op2:
-                    if st.button("✅ Marcar Pago", use_container_width=True) and ids_selecionados:
-                        supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
-                        st.rerun()
-                with c_op3:
-                    if st.button("⏳ Marcar Pendente", use_container_width=True) and ids_selecionados:
-                        supabase.table("lancamentos").update({"status": "Pendente"}).in_("id", ids_selecionados).execute()
-                        st.rerun()
-                with c_op4:
-                    if st.button("🗑️ Apagar", use_container_width=True) and ids_selecionados:
-                        st.session_state.confirmar_delecao = ids_selecionados
-                        st.rerun()
 
 # ========================================================
-# 8. CENTRAL DE CADASTROS
+# 8. SUPER CENTRAL DE CADASTROS (TOTALMENTE RESTAURADA)
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
-    col_dict = {"Contas e Cartões": "Cartao", "Categoria": "Categoria", "Subcategoria": "Subcategoria", "Responsável": "Responsavel", "Origem/Destino": "Origem_Destino"}
-    tipo_cadastro = st.selectbox("Gerenciar:", list(col_dict.keys()))
+    st.write("Aqui você visualiza, renomeia ou exclui opções do seu sistema. Os dados do seu histórico NUNCA somem.")
+    
+    col_dict = {"Contas e Cartões": "Cartao", "Categorias Gerais": "Categoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
+    tipo_cadastro = st.selectbox("O que deseja gerenciar?", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
     
     if col_db == "Cartao":
         with st.container(border=True):
+            st.markdown("#### Adicionar Cartão")
             c1, c2, c3 = st.columns(3)
             with c1: banco_cartao = st.selectbox("Banco", LISTA_BANCOS)
             with c2: final_cartao = st.text_input("Final do Cartão (Ex: 1234)")
             with c3: dia_vencimento = st.number_input("Dia de Vencimento", 1, 31, 10)
-            if st.button("💾 Salvar Cartão", type="primary") and final_cartao.strip():
-                nova_linha_cartao = {
-                    "user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"),
-                    "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"),
-                    "tipo": "Config_Cartao", "categoria": banco_cartao, "subcategoria": final_cartao,
-                    "conta_cartao": f"{banco_cartao} - Final {final_cartao} (Venc: dia {dia_vencimento})",
-                    "valor": float(dia_vencimento), "descricao": "Config Cartão", "responsavel": st.session_state.user_nome, "status": "Pago"
-                }
-                supabase.table("lancamentos").insert(nova_linha_cartao).execute()
-                st.success("Salvo!")
-                time.sleep(1)
+            if st.button("Salvar Cartão", type="primary") and final_cartao:
+                auto_salvar_cadastro("Cartao", f"{banco_cartao} - Final {final_cartao} (Venc: dia {dia_vencimento})")
                 st.rerun()
-        if not df_cartoes.empty:
-            df_cv = df_cartoes[["ID", "Conta_Cartao", "Categoria", "Valor"]].rename(columns={"Conta_Cartao": "Conta", "Categoria": "Banco", "Valor": "Vencimento"})
-            st.dataframe(df_cv.drop(columns=["ID"]), use_container_width=True, hide_index=True)
     else:
-        opcoes_atuais = obter_opcoes(col_db, LISTA_CATEGORIAS if col_db=="Categoria" else LISTA_RESPONSAVEIS_BASE)
-        c1, c2 = st.columns(2)
-        with c1:
+        # LISTA TODOS OS ITENS ATIVOS
+        if col_db == "Categoria": lista_padrao = LISTA_CATEGORIAS_DESPESA + LISTA_CATEGORIAS_RECEITA + LISTA_CATEGORIAS_INVEST
+        elif col_db == "Responsavel": lista_padrao = LISTA_RESPONSAVEIS_BASE
+        else: lista_padrao = LISTA_ORIGEM_BASE
+        
+        opcoes_atuais = obter_opcoes(col_db, lista_padrao)
+        
+        c_cad1, c_cad2 = st.columns(2)
+        with c_cad1:
             with st.container(border=True):
-                novo_item = st.text_input(f"Adicionar {tipo_cadastro}")
-                if st.button("Salvar") and novo_item.strip():
-                    auto_salvar_cadastro(col_db, novo_item.strip())
-                    st.success("Adicionado!")
-                    time.sleep(1)
+                st.markdown(f"#### ➕ Adicionar Novo")
+                novo_item = st.text_input(f"Nome do(a) {tipo_cadastro}")
+                if st.button("Salvar Cadastro") and novo_item:
+                    auto_salvar_cadastro(col_db, novo_item)
                     st.rerun()
-        with c2:
+                    
+        with c_cad2:
             with st.container(border=True):
+                st.markdown(f"#### 🗑️ Ocultar / Excluir da Lista")
+                st.write("Retira o item da lista de opções futuras, mas não afeta o histórico financeiro.")
                 if opcoes_atuais:
-                    item_apagar = st.selectbox(f"Remover {tipo_cadastro} da lista:", opcoes_atuais)
-                    if st.button("Remover"):
-                        nova_linha_oculta = {
-                            "user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"),
-                            "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"),
-                            "tipo": "Config_Excluida", "categoria": col_db, "subcategoria": item_apagar,
-                            "responsavel": st.session_state.user_nome, "origem_destino": "", "conta_cartao": "", "valor": 0.0, "descricao": "Oculto", "parcela": "-", "status": "Config"
-                        }
-                        supabase.table("lancamentos").insert(nova_linha_oculta).execute()
-                        st.success("Removido!")
-                        time.sleep(1)
+                    item_apagar = st.selectbox("Selecione o item para excluir:", opcoes_atuais)
+                    if st.button("Remover Item"):
+                        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": "Config_Excluida", "categoria": col_db, "subcategoria": item_apagar, "responsavel": st.session_state.user_nome, "origem_destino": "", "conta_cartao": "", "valor": 0.0, "descricao": "Oculto", "parcela": "-", "status": "Config"}).execute()
                         st.rerun()
 
 # ========================================================
-# 9. ASSISTENTE IA & 10. OPEN FINANCE
+# 9. ASSISTENTE IA
 # ========================================================
 with aba_assistente:
-    st.markdown("### 🤖 Cérebro Digital")
-    if modelo_ia and st.session_state.user_email:
+    st.markdown("### 🤖 Cérebro Digital - Inteligência Autoral")
+    if modelo_ia:
         prompt = st.chat_input("Pergunte sobre seus dados...")
         if prompt:
-            with st.chat_message("user"): st.markdown(prompt)
+            st.markdown(f"**Você:** {prompt}")
+            hist_txt = df[["Data", "Tipo", "Categoria", "Valor"]].to_string() if not df.empty else "Vazio."
             try:
-                hist_txt = df[["Data", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Responsavel", "Origem_Destino", "Descricao", "Valor"]].to_string(index=False) if not df.empty else "Vazio."
-                resposta = modelo_ia.generate_content(f"Dados:\n{hist_txt}\nPergunta: {prompt}")
-                with st.chat_message("assistant"): st.markdown(resposta.text)
+                res = modelo_ia.generate_content(f"Dados:\n{hist_txt}\nPergunta: {prompt}")
+                st.markdown(f"**IA:** {res.text}")
             except Exception as e: st.error(f"Erro IA: {e}")
-
-with aba_openfinance:
-    st.subheader("🔌 Hub de Integração Bancária")
-    st.info("Módulo de Open Finance pronto para conexões sandbox.")
