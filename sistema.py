@@ -112,6 +112,7 @@ LISTA_CAT_DESP = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinat
 LISTA_CAT_REC = ["Salário / Pró-Labore", "Rendimentos (Dividendos / JCP)", "Vendas", "Outros"]
 LISTA_CAT_INV = ["Ações (B3)", "Fundos Imobiliários (FIIs)", "Renda Fixa", "Criptomoedas", "Ações (EUA)"]
 LISTA_ORIG_BASE = ["Supermercado", "Pix", "Empresa", "Cliente"]
+SUBCATS_BASE = ["Aluguel", "Energia", "Internet", "Água", "Condomínio", "Alimentação", "Software", "Geral"]
 
 @st.cache_data(ttl=5)
 def carregar_dados_completos(email):
@@ -138,6 +139,17 @@ def obter_opcoes(coluna, lista_base):
     ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
     
     todos = set(lista_base + configs + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
+    for item in ocultos:
+        if item in todos: todos.remove(item)
+    return sorted(list(todos))
+
+# 🔥 FUNÇÃO RESTAURADA: Subcategorias Dinâmicas 🔥
+def obter_subcategorias_dinamicas(categoria_alvo):
+    configs = df_configs[(df_configs["Tipo"] == "Config_Subcategoria") & (df_configs["Categoria"] == categoria_alvo)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
+    existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist() if not df.empty and "Subcategoria" in df.columns else []
+    ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == "Subcategoria")]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
+    
+    todos = set(SUBCATS_BASE + configs + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
     for item in ocultos:
         if item in todos: todos.remove(item)
     return sorted(list(todos))
@@ -251,10 +263,14 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES
+# 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
 # ========================================================
-def auto_salvar_cadastro(tipo_cad, valor):
-    try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
+# 🔥 FUNÇÃO ATUALIZADA: Suporta guardar a relação entre Subcategoria e Categoria 🔥
+def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
+    try: 
+        cat_val = valor if tipo_cad == "Categoria" else (vinculada if tipo_cad == "Subcategoria" else "")
+        sub_val = valor if tipo_cad == "Subcategoria" else ""
+        supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": cat_val, "subcategoria": sub_val, "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
     except: pass
 
 with aba_lancamentos:
@@ -271,10 +287,16 @@ with aba_lancamentos:
             st.markdown(f"#### Detalhes: {tipo_mov}")
             
             if tipo_mov == "Despesa":
-                c4, c5, c6 = st.columns(3)
+                # 🔥 RESTAURAÇÃO: Dividimos a tela em 4 para a Subcategoria voltar a caber! 🔥
+                c4, c_sub, c5, c6 = st.columns(4)
                 with c4: 
                     cat_sel = st.selectbox("Categoria do Gasto", obter_opcoes("Categoria", LISTA_CAT_DESP) + ["➕ Nova..."])
                     categoria = st.text_input("Nova Categoria:") if cat_sel == "➕ Nova..." else cat_sel
+                with c_sub:
+                    # O motor dinâmico volta a funcionar dependendo da Categoria que escolheu
+                    opcoes_subcat = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
+                    subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
+                    subcategoria = st.text_input("Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
                 with c5:
                     conta_sel = st.selectbox("Cartão ou Conta Usada", ["Conta Corrente", "Pix", "Dinheiro Físico"] + (df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []) + ["➕ Novo Cartão/Conta..."])
                     conta_cartao = st.text_input("Nova Conta:") if conta_sel == "➕ Novo Cartão/Conta..." else conta_sel
@@ -301,7 +323,6 @@ with aba_lancamentos:
                     parcelas = st.number_input("Quantidade de Parcelas", 2, 120, 2) if tipo_frequencia == "Parcelado" else 1
                 with cf2: status_final = st.selectbox("A fatura/conta já foi paga?", ["Pendente", "Pago"])
                 
-                subcategoria = "Geral"
                 ativo_ticker = ""
 
             elif tipo_mov == "Receita":
@@ -369,10 +390,12 @@ with aba_lancamentos:
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
 
         st.markdown("<br>", unsafe_allow_html=True)
-        # 🔥 AQUI ESTÁ A CORREÇÃO (resp_principal no lugar de responsavel) 🔥
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and resp_principal:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
+                # 🔥 Lógica que guarda a Subcategoria se ela for nova 🔥
+                if tipo_mov == "Despesa" and subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 if orig_sel == "➕ Novo Pagador..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 if orig_sel == "➕ Nova..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
@@ -464,11 +487,7 @@ with aba_lancamentos:
                             time.sleep(1)
                             st.rerun()
                         except Exception as e:
-                            erro_str = str(e)
-                            if 'PGRST204' in erro_str or 'mes_pagamento' in erro_str:
-                                st.error("🚨 O banco de dados ainda não atualizou a memória da coluna 'mes_pagamento'. Por favor, vá ao Supabase > SQL Editor e rode o comando: NOTIFY pgrst, 'reload schema';")
-                            else:
-                                st.error(f"Erro ao salvar: {e}")
+                            st.error(f"Erro ao salvar: {e}")
                 with c_op2:
                     if st.button("✅ Marcar como Pago", use_container_width=True) and ids_selecionados:
                         supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
@@ -487,9 +506,9 @@ with aba_lancamentos:
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
-    st.write("Aqui você visualiza, adiciona ou esconde opções do seu sistema. Os dados do seu histórico financeiro NUNCA somem.")
     
-    col_dict = {"Contas e Cartões": "Cartao", "Categorias Gerais": "Categoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
+    # 🔥 A OPÇÃO DE SUBCATEGORIAS TAMBÉM VOLTOU AQUI! 🔥
+    col_dict = {"Contas e Cartões": "Cartao", "Categorias Gerais": "Categoria", "Subcategorias": "Subcategoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
     tipo_cadastro = st.selectbox("Selecione a lista para gerenciar:", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
     
@@ -516,6 +535,7 @@ with aba_cadastros:
     else:
         if col_db == "Categoria": lista_padrao = LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV
         elif col_db == "Responsavel": lista_padrao = LISTA_RESP_BASE
+        elif col_db == "Subcategoria": lista_padrao = SUBCATS_BASE
         else: lista_padrao = LISTA_ORIG_BASE
         
         opcoes_atuais = obter_opcoes(col_db, lista_padrao)
@@ -524,9 +544,16 @@ with aba_cadastros:
         with c_cad1:
             with st.container(border=True):
                 st.markdown(f"#### ➕ Forçar Novo Cadastro")
+                
+                # Para subcategorias, perguntamos a qual Categoria ela pertence
+                cat_vinculo = ""
+                if col_db == "Subcategoria":
+                    cat_vinculo = st.selectbox("Pertence a qual Categoria?", obter_opcoes("Categoria", LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV))
+                
                 novo_item = st.text_input(f"Digitar novo(a) {tipo_cadastro}")
+                
                 if st.button("Salvar na Lista") and novo_item:
-                    auto_salvar_cadastro(col_db, novo_item)
+                    auto_salvar_cadastro(col_db, novo_item, cat_vinculo)
                     st.success("Salvo!")
                     time.sleep(1)
                     st.rerun()
@@ -534,7 +561,6 @@ with aba_cadastros:
         with c_cad2:
             with st.container(border=True):
                 st.markdown(f"#### 🗑️ Ocultar do Formulário")
-                st.write("Retira o item da lista de opções futuras, mas não afeta o histórico financeiro passado.")
                 if opcoes_atuais:
                     item_apagar = st.selectbox("Selecione para colocar na Lista Negra:", opcoes_atuais)
                     if st.button("Esconder Item"):
