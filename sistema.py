@@ -156,11 +156,10 @@ with c_head2:
         time.sleep(0.5) 
         st.rerun()
 
-# 🔥 ABAS RENOMEADAS CONFORME SOLICITADO 🔥
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Dashboard Geral", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. DASHBOARD
+# 6. DASHBOARD GERAL
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
@@ -168,23 +167,32 @@ with aba_dashboard:
         
         with dash_geral:
             st.markdown("#### 🎯 Filtros Globais")
-            c_f1, c_f2, c_f3 = st.columns(3)
+            # 🔥 FILTROS DO BI CORRIGIDOS E AMPLIADOS 🔥
+            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
             with c_f1: 
-                visao_caixa = st.toggle("Ativar Visão por Pagamento/Fatura (Regime de Caixa)", value=True)
+                visao_caixa = st.toggle("Visão por Pagamento/Fatura", value=True)
                 col_filtro = "Mes_Pagamento" if visao_caixa else "Competencia"
             with c_f2:
                 meses_disp = sorted(df[col_filtro].dropna().unique(), reverse=True)
                 mes_sel = st.selectbox("Período de Análise:", ["Ver Tudo"] + meses_disp)
             with c_f3:
-                resp_sel = st.multiselect("Filtrar por Responsável:", obter_opcoes("Responsavel", LISTA_RESP_BASE), default=obter_opcoes("Responsavel", LISTA_RESP_BASE))
+                # O filtro agora seleciona todos por padrão para não esconder dados!
+                todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
+                resp_sel = st.multiselect("Filtrar por Responsável:", todos_responsaveis, default=todos_responsaveis)
+            with c_f4:
+                # O Filtro de Status voltou para que possa escolher ver os Pendentes!
+                status_sel = st.selectbox("Status dos Lançamentos:", ["Todos", "Pago", "Pendente"])
             
+            # Aplicando os filtros ao banco de dados visual
             df_dash = df.copy()
             if mes_sel != "Ver Tudo": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
             else: df_dash = df_dash.iloc[0:0]
+            if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
             
-            t_rec = df_dash[(df_dash["Tipo"] == "Receita") & (df_dash["Status"] == "Pago")]["Valor"].sum()
-            t_desp = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Status"] == "Pago")]["Valor"].sum()
+            # Somas baseadas no filtro atual da tela (se filtrou pendente, mostra pendente)
+            t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
+            t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
             saldo = t_rec - t_desp
             
@@ -192,7 +200,7 @@ with aba_dashboard:
             cm1, cm2, cm3, cm4 = st.columns(4)
             cm1.metric(label="Saldo do Período", value=f"R$ {saldo:,.2f}", delta="Lucro" if saldo >= 0 else "Prejuízo", delta_color="normal")
             cm2.metric(label="Total Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas Líquidas")
-            cm3.metric(label="Total Saídas", value=f"R$ {t_desp:,.2f}", delta="Despesas Pagas", delta_color="inverse")
+            cm3.metric(label="Total Saídas", value=f"R$ {t_desp:,.2f}", delta="Despesas", delta_color="inverse")
             cm4.metric(label="Total Investido", value=f"R$ {t_inv:,.2f}", delta="Aportes e Alocações", delta_color="off")
             
             st.markdown("---")
@@ -233,6 +241,7 @@ with aba_dashboard:
                 
         with dash_faturas:
             st.markdown("### 💳 Mapa de Faturas (Contas a Pagar)")
+            st.write("Aqui aparecem estritamente as compras associadas a um Cartão de Crédito cadastrado.")
             meses_fat = sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
             if meses_fat:
                 mf_sel = st.selectbox("Selecione o Vencimento:", meses_fat)
@@ -243,7 +252,7 @@ with aba_dashboard:
                 if not df_apenas_cartoes.empty:
                     st.plotly_chart(px.bar(df_apenas_cartoes.groupby("Conta_Cartao")["Valor"].sum().reset_index().sort_values("Valor"), x="Valor", y="Conta_Cartao", orientation='h', title=f"Faturas de {mf_sel}", color_discrete_sequence=["#EF4444"]), use_container_width=True)
                     st.dataframe(df_apenas_cartoes[["Data", "Conta_Cartao", "Descricao", "Parcela", "Valor"]], use_container_width=True, hide_index=True)
-                else: st.info("Sem despesas de cartão neste mês.")
+                else: st.info("Sem despesas em cartão de crédito neste mês selecionado.")
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
@@ -402,7 +411,6 @@ with aba_lancamentos:
         if not df.empty:
             df_view = df[["ID", "Data", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Status"]].copy()
             
-            # Filtros adicionados para facilitar a gestão na Mesa de Operações
             c_f1, c_f2, c_f3 = st.columns(3)
             with c_f1: filtro_tipo = st.selectbox("Filtrar por Tipo", ["Todos", "Despesa", "Receita", "Investimento"])
             with c_f2: filtro_mes = st.selectbox("Filtrar por Mês de Pagamento", ["Todos"] + sorted(df_view["Mes_Pagamento"].unique(), reverse=True))
@@ -474,7 +482,7 @@ with aba_lancamentos:
                         st.rerun()
 
 # ========================================================
-# 8. SUPER CENTRAL DE CADASTROS 
+# 8. SUPER CENTRAL DE CADASTROS
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
