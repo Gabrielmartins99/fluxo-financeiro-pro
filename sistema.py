@@ -251,7 +251,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
+# 7. LANÇAMENTOS INTELIGENTES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor):
     try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
@@ -369,8 +369,9 @@ with aba_lancamentos:
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
 
         st.markdown("<br>", unsafe_allow_html=True)
+        # 🔥 AQUI ESTÁ A CORREÇÃO (resp_principal no lugar de responsavel) 🔥
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
-            if valor_total > 0 and categoria and responsavel:
+            if valor_total > 0 and categoria and resp_principal:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 if orig_sel == "➕ Novo Pagador..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
@@ -462,7 +463,6 @@ with aba_lancamentos:
                             st.success(f"✅ Salvo!")
                             time.sleep(1)
                             st.rerun()
-                        # 🔥 O NOSSO ESCUDO PROTETOR CONTRA O ERRO DE CACHE (PGRST204) 🔥
                         except Exception as e:
                             erro_str = str(e)
                             if 'PGRST204' in erro_str or 'mes_pagamento' in erro_str:
