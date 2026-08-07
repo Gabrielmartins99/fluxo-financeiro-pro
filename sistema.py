@@ -6,12 +6,10 @@ import time
 from supabase import create_client, Client
 import google.generativeai as genai
 import extra_streamlit_components as stx
-from fpdf import FPDF
 
 # ========================================================
 # 1. CREDENCIAIS BASE E DOCUMENTAÇÃO
 # ========================================================
-# Conexão segura com o Supabase (Banco de Dados)
 SUPABASE_URL = "https://tlrrauzylknuatajzniu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscnJhdXp5bGtudWF0YWp6bml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDE5ODMsImV4cCI6MjA5NjA3Nzk4M30.WiTNExA0hJY0AmDY794F7O0ft2SngctNoWQ_LBwyGDk"
 
@@ -26,7 +24,6 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# Configuração da IA (Cérebro Digital)
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_ia = genai.GenerativeModel('gemini-1.0-pro')
@@ -66,10 +63,8 @@ if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 cookie_manager = stx.CookieManager(key="auth_cookies_v6")
 cookies = cookie_manager.get_all()
 
-# Lê os cookies e preenche os dados do utilizador
 if st.session_state.user_email is None and cookies and "u_mail" in cookies and cookies["u_mail"]:
     st.session_state.user_email = cookies["u_mail"]
-    # FORÇA A BUSCA DO NOME REAL NO SUPABASE
     try:
         user_res = supabase.auth.get_user()
         if user_res and user_res.user:
@@ -77,7 +72,6 @@ if st.session_state.user_email is None and cookies and "u_mail" in cookies and c
     except:
         st.session_state.user_nome = cookies.get("u_name", "Usuário")
 
-# Tela de Login se não estiver autenticado
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -122,7 +116,6 @@ LISTA_ORIG_BASE = ["Supermercado", "Pix", "Empresa", "Cliente"]
 
 @st.cache_data(ttl=5)
 def carregar_dados_completos(email):
-    # Puxa os dados e normaliza a coluna mes_pagamento
     try:
         res = supabase.table("lancamentos").select("*").eq("user_email", email).execute()
         if res.data:
@@ -135,14 +128,12 @@ def carregar_dados_completos(email):
     except: pass
     return pd.DataFrame(columns=["ID", "Data", "Mes_Pagamento", "Competencia", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Valor", "Descricao", "Parcela", "Responsavel", "Status", "Origem_Destino"])
 
-# Separação Inteligente: Lançamentos Reais vs Configurações
 df_tudo = carregar_dados_completos(st.session_state.user_email)
 df_configs = df_tudo[df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df = df_tudo[~df_tudo["Tipo"].str.startswith("Config_")].copy() if not df_tudo.empty else pd.DataFrame(columns=df_tudo.columns)
 df_cartoes = df_configs[df_configs["Tipo"] == "Config_Cartao"]
 
 def obter_opcoes(coluna, lista_base):
-    # Motor que junta cadastros salvos, lançamentos passados e remove a lista negra
     configs = df_configs[df_configs["Tipo"] == f"Config_{coluna}"][coluna].dropna().astype(str).unique().tolist() if not df_configs.empty and coluna in df_configs.columns else []
     existentes = df[coluna].dropna().astype(str).unique().tolist() if not df.empty and coluna in df.columns else []
     ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
@@ -159,13 +150,11 @@ c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
     st.markdown(f"<div style='text-align: right; padding-top: 15px;'><span style='font-size:18px;'>👤 Olá, <b>{st.session_state.user_nome}</b></span></div>", unsafe_allow_html=True)
-    
-    # 🔥 CORREÇÃO: Função de Logout blindada com Keys Únicas 🔥
     if st.button("Sair (Logout)", use_container_width=True):
         cookie_manager.delete("u_mail", key="logout_del_mail")
         cookie_manager.delete("u_name", key="logout_del_name")
         st.session_state.clear()
-        time.sleep(0.5) # Aguarda os componentes invisíveis concluírem a exclusão
+        time.sleep(0.5) 
         st.rerun()
 
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Visão BI & Gorila", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
@@ -200,7 +189,6 @@ with aba_dashboard:
             saldo = t_rec - t_desp
             
             st.markdown("<br>", unsafe_allow_html=True)
-            # Cards de KPI (Power BI Style)
             cm1, cm2, cm3, cm4 = st.columns(4)
             cm1.metric(label="Saldo do Período", value=f"R$ {saldo:,.2f}", delta="Lucro" if saldo >= 0 else "Prejuízo", delta_color="normal")
             cm2.metric(label="Total Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas Líquidas")
@@ -211,7 +199,7 @@ with aba_dashboard:
             if t_desp > 0:
                 cg1, cg2 = st.columns(2)
                 with cg1: 
-                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas (Onde seu dinheiro foi?)", hole=0.4), use_container_width=True)
+                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas", hole=0.4), use_container_width=True)
                 with cg2: 
                     st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
 
@@ -262,7 +250,6 @@ with aba_dashboard:
 # 7. LANÇAMENTOS INTELIGENTES E MUTANTES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor):
-    # Salva opções no banco automaticamente
     try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
     except: pass
 
@@ -280,9 +267,6 @@ with aba_lancamentos:
         with st.container(border=True):
             st.markdown(f"#### Detalhes: {tipo_mov}")
             
-            # ----------------------------------------------------
-            # FORMULÁRIO DE DESPESA (Completo)
-            # ----------------------------------------------------
             if tipo_mov == "Despesa":
                 c4, c5, c6 = st.columns(3)
                 with c4: 
@@ -317,16 +301,12 @@ with aba_lancamentos:
                 subcategoria = "Geral"
                 ativo_ticker = ""
 
-            # ----------------------------------------------------
-            # FORMULÁRIO DE RECEITA (Otimizado)
-            # ----------------------------------------------------
             elif tipo_mov == "Receita":
                 c4, c5, c6 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Tipo de Receita", obter_opcoes("Categoria", LISTA_CAT_REC) + ["➕ Nova..."])
                     categoria = st.text_input("Nova Receita:") if cat_sel == "➕ Nova..." else cat_sel
                 with c5:
-                    # Ticker apenas para receitas financeiras
                     if "Dividendos" in categoria or "JCP" in categoria or "Rendimentos" in categoria:
                         ativo_ticker = st.text_input("Ticker que pagou (Ex: MXRF11)").upper()
                         orig_sel = "Bolsa / B3"
@@ -357,9 +337,6 @@ with aba_lancamentos:
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
                 subcategoria = "Geral"
 
-            # ----------------------------------------------------
-            # FORMULÁRIO DE INVESTIMENTO (Gorila Style)
-            # ----------------------------------------------------
             else: 
                 st.info("💡 Investimento é construção de patrimônio. A ordem é executada e o dinheiro transferido.")
                 c4, c5, c6 = st.columns(3)
@@ -382,7 +359,7 @@ with aba_lancamentos:
                     
                 tipo_frequencia = "Único"
                 parcelas = 1
-                status_final = "Pago" # Executado
+                status_final = "Pago" 
                 
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
                 ano_comp = ano_pag = data_ocorreu.year
@@ -421,11 +398,115 @@ with aba_lancamentos:
                 except Exception as e: st.error(f"Erro no banco de dados: {e}")
             else: st.warning("Preencha o Valor e a Categoria obrigatórios!")
 
+    # 🔥 AQUI ESTÁ A ABA DE EDIÇÃO RESTAURADA COM OS BOTÕES 🔥
     with aba_gerenciar:
-        st.markdown("### ✏️ Edição de Histórico")
-        if not df.empty:
-            df_view = df[["ID", "Data", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Status"]].copy()
-            st.data_editor(df_view, hide_index=True, use_container_width=True, disabled=["ID"])
+        st.markdown("### ✏️ Mesa de Operações: Edição de Histórico")
+        if df.empty:
+            st.info("Nenhum lançamento encontrado para gerenciar.")
+        else:
+            df_view = df[["ID", "Data", "Competencia", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
+            
+            st.markdown("#### 🔍 Filtros de Busca")
+            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
+            with c_f1:
+                opcoes_tipo = ["Todos", "Despesa", "Receita", "Investimento"]
+                filtro_tipo = st.selectbox("Filtrar por Tipo", opcoes_tipo)
+            with c_f2:
+                opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
+                filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
+            with c_f3:
+                opcoes_resp_gerenciar = sorted(df_view["Responsavel"].dropna().unique())
+                filtro_resp_multi = st.multiselect("Filtrar por Responsáveis", opcoes_resp_gerenciar, default=opcoes_resp_gerenciar)
+            with c_f4:
+                opcoes_status = ["Todos", "Pago", "Pendente"]
+                filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
+            
+            if filtro_tipo != "Todos":
+                df_view = df_view[df_view["Tipo"] == filtro_tipo]
+            if filtro_comp != "Todos":
+                df_view = df_view[df_view["Competencia"] == filtro_comp]
+            if filtro_resp_multi:
+                df_view = df_view[df_view["Responsavel"].isin(filtro_resp_multi)]
+            else:
+                df_view = df_view.iloc[0:0]
+
+            if filtro_status != "Todos":
+                df_view = df_view[df_view["Status"] == filtro_status]
+            
+            st.markdown("---")
+            selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos", value=False)
+            df_view.insert(0, "Selecionar", selecionar_tudo)
+            
+            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Pode editar os campos diretamente na tabela!")
+            
+            df_resultado = st.data_editor(
+                df_view, 
+                hide_index=True, 
+                use_container_width=True, 
+                disabled=["ID"] 
+            )
+            
+            ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
+            
+            if "confirmar_delecao" in st.session_state and st.session_state.confirmar_delecao:
+                st.error(f"⚠️ **Confirmação:** Apagar {len(st.session_state.confirmar_delecao)} lançamentos permanentemente?")
+                col_sim, col_nao = st.columns(2)
+                with col_sim:
+                    if st.button("🚨 SIM, APAGAR DEFINITIVAMENTE", use_container_width=True):
+                        try:
+                            supabase.table("lancamentos").delete().in_("id", st.session_state.confirmar_delecao).execute()
+                            st.session_state.confirmar_delecao = False
+                            st.success("Removido!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: st.error(f"Erro: {e}")
+                with col_nao:
+                    if st.button("✅ CANCELAR", type="primary", use_container_width=True):
+                        st.session_state.confirmar_delecao = False
+                        st.rerun()
+            else:
+                st.markdown("#### ⚡ Ações Rápidas (Para os itens selecionados)")
+                c_op1, c_op2, c_op3, c_op4 = st.columns(4)
+                
+                with c_op1:
+                    if st.button("💾 Salvar Edições Manuais", type="primary", use_container_width=True):
+                        try:
+                            mudancas = 0
+                            for idx in range(len(df_resultado)):
+                                row_ed = df_resultado.iloc[idx]
+                                row_og = df_view.iloc[idx]
+                                if not row_ed["Selecionar"]:
+                                    supabase.table("lancamentos").update({
+                                        "data_compra": str(row_ed["Data"]),
+                                        "competencia": str(row_ed["Competencia"]),
+                                        "mes_pagamento": str(row_ed["Mes_Pagamento"]),
+                                        "tipo": str(row_ed["Tipo"]),
+                                        "categoria": str(row_ed["Categoria"]),
+                                        "subcategoria": str(row_ed["Subcategoria"]),
+                                        "conta_cartao": str(row_ed["Conta_Cartao"]),
+                                        "descricao": str(row_ed["Descricao"]),
+                                        "valor": float(row_ed["Valor"]),
+                                        "responsavel": str(row_ed["Responsavel"]),
+                                        "origem_destino": str(row_ed["Origem_Destino"]),
+                                        "status": str(row_ed["Status"])
+                                    }).eq("id", str(row_ed["ID"])).execute()
+                                    mudancas += 1
+                            st.success(f"✅ Salvo com sucesso!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: st.error(f"Erro: {e}")
+                with c_op2:
+                    if st.button("✅ Marcar como Pago", use_container_width=True) and ids_selecionados:
+                        supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
+                        st.rerun()
+                with c_op3:
+                    if st.button("⏳ Marcar como Pendente", use_container_width=True) and ids_selecionados:
+                        supabase.table("lancamentos").update({"status": "Pendente"}).in_("id", ids_selecionados).execute()
+                        st.rerun()
+                with c_op4:
+                    if st.button("🗑️ Apagar Selecionados", use_container_width=True) and ids_selecionados:
+                        st.session_state.confirmar_delecao = ids_selecionados
+                        st.rerun()
 
 # ========================================================
 # 8. SUPER CENTRAL DE CADASTROS (RESTAURADA E VISÍVEL)
@@ -459,7 +540,6 @@ with aba_cadastros:
                 supabase.table("lancamentos").delete().eq("id", id_rem).execute()
                 st.rerun()
     else:
-        # Busca 100% de tudo o que existe no banco para garantir que nada some
         if col_db == "Categoria": lista_padrao = LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV
         elif col_db == "Responsavel": lista_padrao = LISTA_RESP_BASE
         else: lista_padrao = LISTA_ORIG_BASE
