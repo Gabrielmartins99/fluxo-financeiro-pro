@@ -167,7 +167,6 @@ with aba_dashboard:
         
         with dash_geral:
             st.markdown("#### 🎯 Filtros Globais")
-            # 🔥 FILTROS DO BI CORRIGIDOS E AMPLIADOS 🔥
             c_f1, c_f2, c_f3, c_f4 = st.columns(4)
             with c_f1: 
                 visao_caixa = st.toggle("Visão por Pagamento/Fatura", value=True)
@@ -176,21 +175,17 @@ with aba_dashboard:
                 meses_disp = sorted(df[col_filtro].dropna().unique(), reverse=True)
                 mes_sel = st.selectbox("Período de Análise:", ["Ver Tudo"] + meses_disp)
             with c_f3:
-                # O filtro agora seleciona todos por padrão para não esconder dados!
                 todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                 resp_sel = st.multiselect("Filtrar por Responsável:", todos_responsaveis, default=todos_responsaveis)
             with c_f4:
-                # O Filtro de Status voltou para que possa escolher ver os Pendentes!
                 status_sel = st.selectbox("Status dos Lançamentos:", ["Todos", "Pago", "Pendente"])
             
-            # Aplicando os filtros ao banco de dados visual
             df_dash = df.copy()
             if mes_sel != "Ver Tudo": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
             else: df_dash = df_dash.iloc[0:0]
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
             
-            # Somas baseadas no filtro atual da tela (se filtrou pendente, mostra pendente)
             t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
             t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
@@ -256,7 +251,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES
+# 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor):
     try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
@@ -467,7 +462,13 @@ with aba_lancamentos:
                             st.success(f"✅ Salvo!")
                             time.sleep(1)
                             st.rerun()
-                        except Exception as e: st.error(f"Erro: {e}")
+                        # 🔥 O NOSSO ESCUDO PROTETOR CONTRA O ERRO DE CACHE (PGRST204) 🔥
+                        except Exception as e:
+                            erro_str = str(e)
+                            if 'PGRST204' in erro_str or 'mes_pagamento' in erro_str:
+                                st.error("🚨 O banco de dados ainda não atualizou a memória da coluna 'mes_pagamento'. Por favor, vá ao Supabase > SQL Editor e rode o comando: NOTIFY pgrst, 'reload schema';")
+                            else:
+                                st.error(f"Erro ao salvar: {e}")
                 with c_op2:
                     if st.button("✅ Marcar como Pago", use_container_width=True) and ids_selecionados:
                         supabase.table("lancamentos").update({"status": "Pago"}).in_("id", ids_selecionados).execute()
