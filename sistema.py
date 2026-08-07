@@ -31,7 +31,7 @@ else:
     modelo_ia = None
 
 # ========================================================
-# 2. CONFIGURAÇÃO VISUAL E CSS (ESTILO BI)
+# 2. CONFIGURAÇÃO VISUAL E CSS (ESTILO PROFISSIONAL)
 # ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
@@ -44,7 +44,6 @@ st.markdown("""
         div[data-baseweb="input"], .stSelectbox div { border-radius: 6px !important; }
         div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 6px; padding: 10px; }
         
-        /* Estilo Power BI para os Cards (Métricas) */
         [data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 800 !important; }
         [data-testid="stMetricLabel"] { font-size: 14px !important; font-weight: 600 !important; color: #64748B !important; }
         div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
@@ -55,7 +54,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO COM FORÇA DE IDENTIDADE
+# 3. AUTENTICAÇÃO
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
@@ -105,7 +104,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA (CADASTROS BASE)
+# 4. GESTÃO DE MASTER DATA
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome, "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
@@ -144,7 +143,7 @@ def obter_opcoes(coluna, lista_base):
     return sorted(list(todos))
 
 # ========================================================
-# 5. HEADER (PADRÃO PROFISSIONAL E LOGOUT CORRIGIDO)
+# 5. HEADER 
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -157,16 +156,17 @@ with c_head2:
         time.sleep(0.5) 
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Visão BI & Gorila", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
+# 🔥 ABAS RENOMEADAS CONFORME SOLICITADO 🔥
+aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Dashboard Geral", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. DASHBOARD: ESTILO POWER BI E GORILA
+# 6. DASHBOARD
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_bi, dash_gorila, dash_faturas = st.tabs(["📊 Visão Global (BI)", "📈 Carteira de Investimentos (Gorila)", "💳 Gestão de Faturas"])
+        dash_geral, dash_investimentos, dash_faturas = st.tabs(["📊 Visão Global", "📈 Carteira de Investimentos", "💳 Gestão de Faturas"])
         
-        with dash_bi:
+        with dash_geral:
             st.markdown("#### 🎯 Filtros Globais")
             c_f1, c_f2, c_f3 = st.columns(3)
             with c_f1: 
@@ -199,11 +199,11 @@ with aba_dashboard:
             if t_desp > 0:
                 cg1, cg2 = st.columns(2)
                 with cg1: 
-                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas", hole=0.4), use_container_width=True)
+                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas (Onde seu dinheiro foi?)", hole=0.4), use_container_width=True)
                 with cg2: 
                     st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
 
-        with dash_gorila:
+        with dash_investimentos:
             st.markdown("### 📈 Sua Carteira de Ativos")
             df_invest = df[df["Tipo"] == "Investimento"].copy()
             df_prov = df[(df["Tipo"] == "Receita") & (df["Categoria"].str.contains("Dividendos|JCP|Rendimentos", case=False, na=False))].copy()
@@ -247,7 +247,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES E MUTANTES
+# 7. LANÇAMENTOS INTELIGENTES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor):
     try: supabase.table("lancamentos").insert({"user_email": st.session_state.user_email, "data_compra": datetime.now().strftime("%Y-%m-%d"), "competencia": datetime.now().strftime("%Y-%m"), "mes_pagamento": datetime.now().strftime("%Y-%m"), "tipo": f"Config_{tipo_cad}", "categoria": valor if tipo_cad == "Categoria" else "", "subcategoria": valor if tipo_cad == "Subcategoria" else "", "responsavel": valor if tipo_cad == "Responsavel" else "", "origem_destino": valor if tipo_cad == "Origem_Destino" else "", "conta_cartao": "", "valor": 0.0, "descricao": "Configuração Automática", "parcela": "-", "status": "Config"}).execute()
@@ -257,7 +257,6 @@ with aba_lancamentos:
     aba_manual, aba_gerenciar = st.tabs(["✍️ Painel de Lançamento", "✏️ Editar Histórico"])
     
     with aba_manual:
-        # 1. ESCOLHA DO TIPO (O GATILHO MUTANTE)
         with st.container(border=True):
             c_tipo, c_val, c_data = st.columns(3)
             with c_tipo: tipo_mov = st.selectbox("O que vamos lançar hoje?", ["Despesa", "Receita", "Investimento"])
@@ -398,54 +397,26 @@ with aba_lancamentos:
                 except Exception as e: st.error(f"Erro no banco de dados: {e}")
             else: st.warning("Preencha o Valor e a Categoria obrigatórios!")
 
-    # 🔥 AQUI ESTÁ A ABA DE EDIÇÃO RESTAURADA COM OS BOTÕES 🔥
     with aba_gerenciar:
-        st.markdown("### ✏️ Mesa de Operações: Edição de Histórico")
-        if df.empty:
-            st.info("Nenhum lançamento encontrado para gerenciar.")
-        else:
-            df_view = df[["ID", "Data", "Competencia", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Responsavel", "Origem_Destino", "Status"]].copy()
+        st.markdown("### ✏️ Edição de Histórico")
+        if not df.empty:
+            df_view = df[["ID", "Data", "Mes_Pagamento", "Tipo", "Categoria", "Subcategoria", "Conta_Cartao", "Descricao", "Valor", "Status"]].copy()
             
-            st.markdown("#### 🔍 Filtros de Busca")
-            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
-            with c_f1:
-                opcoes_tipo = ["Todos", "Despesa", "Receita", "Investimento"]
-                filtro_tipo = st.selectbox("Filtrar por Tipo", opcoes_tipo)
-            with c_f2:
-                opcoes_comp = ["Todos"] + sorted(df_view["Competencia"].unique(), reverse=True)
-                filtro_comp = st.selectbox("Filtrar por Competência", opcoes_comp)
-            with c_f3:
-                opcoes_resp_gerenciar = sorted(df_view["Responsavel"].dropna().unique())
-                filtro_resp_multi = st.multiselect("Filtrar por Responsáveis", opcoes_resp_gerenciar, default=opcoes_resp_gerenciar)
-            with c_f4:
-                opcoes_status = ["Todos", "Pago", "Pendente"]
-                filtro_status = st.selectbox("Filtrar por Status", opcoes_status)
+            # Filtros adicionados para facilitar a gestão na Mesa de Operações
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1: filtro_tipo = st.selectbox("Filtrar por Tipo", ["Todos", "Despesa", "Receita", "Investimento"])
+            with c_f2: filtro_mes = st.selectbox("Filtrar por Mês de Pagamento", ["Todos"] + sorted(df_view["Mes_Pagamento"].unique(), reverse=True))
+            with c_f3: filtro_status = st.selectbox("Filtrar por Status", ["Todos", "Pago", "Pendente"])
             
-            if filtro_tipo != "Todos":
-                df_view = df_view[df_view["Tipo"] == filtro_tipo]
-            if filtro_comp != "Todos":
-                df_view = df_view[df_view["Competencia"] == filtro_comp]
-            if filtro_resp_multi:
-                df_view = df_view[df_view["Responsavel"].isin(filtro_resp_multi)]
-            else:
-                df_view = df_view.iloc[0:0]
-
-            if filtro_status != "Todos":
-                df_view = df_view[df_view["Status"] == filtro_status]
+            if filtro_tipo != "Todos": df_view = df_view[df_view["Tipo"] == filtro_tipo]
+            if filtro_mes != "Todos": df_view = df_view[df_view["Mes_Pagamento"] == filtro_mes]
+            if filtro_status != "Todos": df_view = df_view[df_view["Status"] == filtro_status]
             
             st.markdown("---")
-            selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos", value=False)
+            selecionar_tudo = st.checkbox("☑️ Selecionar todos os lançamentos visíveis abaixo", value=False)
             df_view.insert(0, "Selecionar", selecionar_tudo)
             
-            st.write(f"🔒 **Instruções:** Estão listados {len(df_view)} lançamentos. Pode editar os campos diretamente na tabela!")
-            
-            df_resultado = st.data_editor(
-                df_view, 
-                hide_index=True, 
-                use_container_width=True, 
-                disabled=["ID"] 
-            )
-            
+            df_resultado = st.data_editor(df_view, hide_index=True, use_container_width=True, disabled=["ID"])
             ids_selecionados = df_resultado[df_resultado["Selecionar"] == True]["ID"].tolist()
             
             if "confirmar_delecao" in st.session_state and st.session_state.confirmar_delecao:
@@ -456,7 +427,7 @@ with aba_lancamentos:
                         try:
                             supabase.table("lancamentos").delete().in_("id", st.session_state.confirmar_delecao).execute()
                             st.session_state.confirmar_delecao = False
-                            st.success("Removido!")
+                            st.success("Removidos com sucesso!")
                             time.sleep(1)
                             st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
@@ -465,20 +436,16 @@ with aba_lancamentos:
                         st.session_state.confirmar_delecao = False
                         st.rerun()
             else:
-                st.markdown("#### ⚡ Ações Rápidas (Para os itens selecionados)")
                 c_op1, c_op2, c_op3, c_op4 = st.columns(4)
-                
                 with c_op1:
                     if st.button("💾 Salvar Edições Manuais", type="primary", use_container_width=True):
                         try:
                             mudancas = 0
                             for idx in range(len(df_resultado)):
                                 row_ed = df_resultado.iloc[idx]
-                                row_og = df_view.iloc[idx]
                                 if not row_ed["Selecionar"]:
                                     supabase.table("lancamentos").update({
                                         "data_compra": str(row_ed["Data"]),
-                                        "competencia": str(row_ed["Competencia"]),
                                         "mes_pagamento": str(row_ed["Mes_Pagamento"]),
                                         "tipo": str(row_ed["Tipo"]),
                                         "categoria": str(row_ed["Categoria"]),
@@ -486,12 +453,10 @@ with aba_lancamentos:
                                         "conta_cartao": str(row_ed["Conta_Cartao"]),
                                         "descricao": str(row_ed["Descricao"]),
                                         "valor": float(row_ed["Valor"]),
-                                        "responsavel": str(row_ed["Responsavel"]),
-                                        "origem_destino": str(row_ed["Origem_Destino"]),
                                         "status": str(row_ed["Status"])
                                     }).eq("id", str(row_ed["ID"])).execute()
                                     mudancas += 1
-                            st.success(f"✅ Salvo com sucesso!")
+                            st.success(f"✅ Salvo!")
                             time.sleep(1)
                             st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
@@ -509,7 +474,7 @@ with aba_lancamentos:
                         st.rerun()
 
 # ========================================================
-# 8. SUPER CENTRAL DE CADASTROS (RESTAURADA E VISÍVEL)
+# 8. SUPER CENTRAL DE CADASTROS 
 # ========================================================
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
