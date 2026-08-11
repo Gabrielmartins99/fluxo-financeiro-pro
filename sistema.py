@@ -54,16 +54,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO BLINDADA (FIM DA AMNÉSIA DO NOME)
+# 3. AUTENTICAÇÃO BLINDADA
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 
-# Nova chave de cookies para forçar atualização
 cookie_manager = stx.CookieManager(key="auth_cookies_v7")
 cookies = cookie_manager.get_all()
 
-# Resgata o email e o nome estritamente dos cookies salvos (Sem depender do token do Supabase)
 if st.session_state.user_email is None and cookies and "u_mail" in cookies and cookies["u_mail"]:
     st.session_state.user_email = cookies["u_mail"]
     st.session_state.user_nome = cookies.get("u_name", "Usuário")
@@ -84,7 +82,6 @@ if not st.session_state.user_email:
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
                         
-                        # Salva na memória permanente do navegador
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60, key="login_mail")
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60, key="login_name")
                         time.sleep(0.5)
@@ -419,7 +416,6 @@ with aba_lancamentos:
                 except Exception as e: st.error(f"Erro no banco de dados: {e}")
             else: st.warning("Preencha o Valor e a Categoria obrigatórios!")
 
-    # 🔥 Correção da Tela Branca na Aba Editar Histórico 🔥
     with aba_gerenciar:
         st.markdown("### ✏️ Edição de Histórico")
         if not df.empty:
