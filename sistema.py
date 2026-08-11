@@ -31,7 +31,7 @@ else:
     modelo_ia = None
 
 # ========================================================
-# 2. CONFIGURAÇÃO VISUAL E CSS (ESTILO PROFISSIONAL)
+# 2. CONFIGURAÇÃO VISUAL E CSS
 # ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
@@ -54,22 +54,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO
+# 3. AUTENTICAÇÃO BLINDADA (FIM DA AMNÉSIA DO NOME)
 # ========================================================
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
 
-cookie_manager = stx.CookieManager(key="auth_cookies_v6")
+# Nova chave de cookies para forçar atualização
+cookie_manager = stx.CookieManager(key="auth_cookies_v7")
 cookies = cookie_manager.get_all()
 
+# Resgata o email e o nome estritamente dos cookies salvos (Sem depender do token do Supabase)
 if st.session_state.user_email is None and cookies and "u_mail" in cookies and cookies["u_mail"]:
     st.session_state.user_email = cookies["u_mail"]
-    try:
-        user_res = supabase.auth.get_user()
-        if user_res and user_res.user:
-            st.session_state.user_nome = user_res.user.user_metadata.get("primeiro_nome", cookies.get("u_name", "Usuário"))
-    except:
-        st.session_state.user_nome = cookies.get("u_name", "Usuário")
+    st.session_state.user_nome = cookies.get("u_name", "Usuário")
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -86,6 +83,8 @@ if not st.session_state.user_email:
                         st.session_state.user_email = res.user.email
                         nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
                         st.session_state.user_nome = nome_salvo
+                        
+                        # Salva na memória permanente do navegador
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60, key="login_mail")
                         cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60, key="login_name")
                         time.sleep(0.5)
@@ -143,7 +142,6 @@ def obter_opcoes(coluna, lista_base):
         if item in todos: todos.remove(item)
     return sorted(list(todos))
 
-# 🔥 FUNÇÃO RESTAURADA: Subcategorias Dinâmicas 🔥
 def obter_subcategorias_dinamicas(categoria_alvo):
     configs = df_configs[(df_configs["Tipo"] == "Config_Subcategoria") & (df_configs["Categoria"] == categoria_alvo)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
     existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist() if not df.empty and "Subcategoria" in df.columns else []
@@ -265,7 +263,6 @@ with aba_dashboard:
 # ========================================================
 # 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
 # ========================================================
-# 🔥 FUNÇÃO ATUALIZADA: Suporta guardar a relação entre Subcategoria e Categoria 🔥
 def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
     try: 
         cat_val = valor if tipo_cad == "Categoria" else (vinculada if tipo_cad == "Subcategoria" else "")
@@ -287,13 +284,11 @@ with aba_lancamentos:
             st.markdown(f"#### Detalhes: {tipo_mov}")
             
             if tipo_mov == "Despesa":
-                # 🔥 RESTAURAÇÃO: Dividimos a tela em 4 para a Subcategoria voltar a caber! 🔥
                 c4, c_sub, c5, c6 = st.columns(4)
                 with c4: 
                     cat_sel = st.selectbox("Categoria do Gasto", obter_opcoes("Categoria", LISTA_CAT_DESP) + ["➕ Nova..."])
                     categoria = st.text_input("Nova Categoria:") if cat_sel == "➕ Nova..." else cat_sel
                 with c_sub:
-                    # O motor dinâmico volta a funcionar dependendo da Categoria que escolheu
                     opcoes_subcat = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
                     subcat_sel = st.selectbox("Subcategoria", opcoes_subcat)
                     subcategoria = st.text_input("Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
@@ -393,7 +388,6 @@ with aba_lancamentos:
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and resp_principal:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                # 🔥 Lógica que guarda a Subcategoria se ela for nova 🔥
                 if tipo_mov == "Despesa" and subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
                 
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
@@ -425,6 +419,7 @@ with aba_lancamentos:
                 except Exception as e: st.error(f"Erro no banco de dados: {e}")
             else: st.warning("Preencha o Valor e a Categoria obrigatórios!")
 
+    # 🔥 Correção da Tela Branca na Aba Editar Histórico 🔥
     with aba_gerenciar:
         st.markdown("### ✏️ Edição de Histórico")
         if not df.empty:
@@ -500,6 +495,8 @@ with aba_lancamentos:
                     if st.button("🗑️ Apagar Selecionados", use_container_width=True) and ids_selecionados:
                         st.session_state.confirmar_delecao = ids_selecionados
                         st.rerun()
+        else:
+            st.info("Nenhum lançamento encontrado para gerenciar. Por favor, adicione novos dados.")
 
 # ========================================================
 # 8. SUPER CENTRAL DE CADASTROS
@@ -507,7 +504,6 @@ with aba_lancamentos:
 with aba_cadastros:
     st.markdown("### ⚙️ Central de Cadastros e Configurações")
     
-    # 🔥 A OPÇÃO DE SUBCATEGORIAS TAMBÉM VOLTOU AQUI! 🔥
     col_dict = {"Contas e Cartões": "Cartao", "Categorias Gerais": "Categoria", "Subcategorias": "Subcategoria", "Responsáveis": "Responsavel", "Fornecedores / Origens": "Origem_Destino"}
     tipo_cadastro = st.selectbox("Selecione a lista para gerenciar:", list(col_dict.keys()))
     col_db = col_dict[tipo_cadastro]
@@ -545,7 +541,6 @@ with aba_cadastros:
             with st.container(border=True):
                 st.markdown(f"#### ➕ Forçar Novo Cadastro")
                 
-                # Para subcategorias, perguntamos a qual Categoria ela pertence
                 cat_vinculo = ""
                 if col_db == "Subcategoria":
                     cat_vinculo = st.selectbox("Pertence a qual Categoria?", obter_opcoes("Categoria", LISTA_CAT_DESP + LISTA_CAT_REC + LISTA_CAT_INV))
