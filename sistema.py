@@ -54,17 +54,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. AUTENTICAÇÃO BLINDADA
+# 3. AUTENTICAÇÃO E RESOLUÇÃO DE NOME
 # ========================================================
-if "user_email" not in st.session_state: st.session_state.user_email = None
-if "user_nome" not in st.session_state: st.session_state.user_nome = "Usuário"
+def extrair_nome_de_email(email):
+    if not email:
+        return "Usuário"
+    usuario_prefixo = email.split("@")[0]
+    nome_limpo = usuario_prefixo.split(".")[0].split("_")[0].split("-")[0]
+    return nome_limpo.capitalize()
 
-cookie_manager = stx.CookieManager(key="auth_cookies_v7")
+if "user_email" not in st.session_state: st.session_state.user_email = None
+if "user_nome" not in st.session_state: st.session_state.user_nome = None
+
+cookie_manager = stx.CookieManager(key="auth_cookies_v9")
 cookies = cookie_manager.get_all()
 
 if st.session_state.user_email is None and cookies and "u_mail" in cookies and cookies["u_mail"]:
     st.session_state.user_email = cookies["u_mail"]
-    st.session_state.user_nome = cookies.get("u_name", "Usuário")
+
+if st.session_state.user_email and (not st.session_state.user_nome or st.session_state.user_nome == "Usuário"):
+    nome_cookie = cookies.get("u_name") if cookies else None
+    if nome_cookie and nome_cookie != "Usuário":
+        st.session_state.user_nome = nome_cookie
+    else:
+        st.session_state.user_nome = extrair_nome_de_email(st.session_state.user_email)
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -79,11 +92,12 @@ if not st.session_state.user_email:
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
                         st.session_state.user_email = res.user.email
-                        nome_salvo = res.user.user_metadata.get("primeiro_nome", "Usuário")
-                        st.session_state.user_nome = nome_salvo
+                        nome_metadado = res.user.user_metadata.get("primeiro_nome") if res.user and res.user.user_metadata else None
+                        nome_final = nome_metadado if nome_metadado else extrair_nome_de_email(res.user.email)
+                        st.session_state.user_nome = nome_final
                         
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60, key="login_mail")
-                        cookie_manager.set("u_name", nome_salvo, max_age=30*24*60*60, key="login_name")
+                        cookie_manager.set("u_name", nome_final, max_age=30*24*60*60, key="login_name")
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e: st.error(f"Erro no login: {e}")
@@ -102,13 +116,13 @@ if not st.session_state.user_email:
 # ========================================================
 # 4. GESTÃO DE MASTER DATA
 # ========================================================
-LISTA_RESP_BASE = [st.session_state.user_nome, "Família", "Empresa"]
+LISTA_RESP_BASE = [st.session_state.user_nome if st.session_state.user_nome else "Gabriel", "Roberson", "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
-LISTA_CAT_DESP = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Saúde", "Impostos", "Outros"]
-LISTA_CAT_REC = ["Salário / Pró-Labore", "Rendimentos (Dividendos / JCP)", "Vendas", "Outros"]
+LISTA_CAT_DESP = ["Alimentação", "Transporte", "Moradia", "Salário", "Assinaturas", "Saúde", "Impostos", "Vestuário", "Outros"]
+LISTA_CAT_REC = ["Salário / Pró-Labore", "Reembolsos / Estornos", "Rendimentos (Dividendos / JCP)", "Vendas", "Outros"]
 LISTA_CAT_INV = ["Ações (B3)", "Fundos Imobiliários (FIIs)", "Renda Fixa", "Criptomoedas", "Ações (EUA)"]
-LISTA_ORIG_BASE = ["Supermercado", "Pix", "Empresa", "Cliente"]
-SUBCATS_BASE = ["Aluguel", "Energia", "Internet", "Água", "Condomínio", "Alimentação", "Software", "Geral"]
+LISTA_ORIG_BASE = ["Supermercado", "Pix", "Empresa", "Cliente", "Shein", "Roberson"]
+SUBCATS_BASE = ["Aluguel", "Energia", "Internet", "Água", "Condomínio", "Alimentação", "Software", "Reembolso de Terceiros", "Estorno de Compra", "Geral"]
 
 @st.cache_data(ttl=5)
 def carregar_dados_completos(email):
@@ -150,7 +164,7 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     return sorted(list(todos))
 
 # ========================================================
-# 5. HEADER 
+# 5. HEADER
 # ========================================================
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
@@ -258,7 +272,7 @@ with aba_dashboard:
     else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
+# 7. LANÇAMENTOS INTELIGENTES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
     try: 
@@ -318,10 +332,14 @@ with aba_lancamentos:
                 ativo_ticker = ""
 
             elif tipo_mov == "Receita":
-                c4, c5, c6 = st.columns(3)
+                c4, c_sub_rec, c5 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Tipo de Receita", obter_opcoes("Categoria", LISTA_CAT_REC) + ["➕ Nova..."])
                     categoria = st.text_input("Nova Receita:") if cat_sel == "➕ Nova..." else cat_sel
+                with c_sub_rec:
+                    opcoes_subcat_rec = obter_subcategorias_dinamicas(categoria) + ["➕ Nova Subcategoria..."]
+                    subcat_sel = st.selectbox("Subcategoria", opcoes_subcat_rec)
+                    subcategoria = st.text_input("Nova Subcategoria:") if subcat_sel == "➕ Nova Subcategoria..." else subcat_sel
                 with c5:
                     if "Dividendos" in categoria or "JCP" in categoria or "Rendimentos" in categoria:
                         ativo_ticker = st.text_input("Ticker que pagou (Ex: MXRF11)").upper()
@@ -329,20 +347,22 @@ with aba_lancamentos:
                         origem_destino = orig_sel
                     else:
                         ativo_ticker = ""
-                        orig_sel = st.selectbox("Quem pagou? (Origem)", obter_opcoes("Origem_Destino", ["Cliente", "Empregador", "Governo"]) + ["➕ Novo Pagador..."])
+                        orig_sel = st.selectbox("Quem pagou? (Origem)", obter_opcoes("Origem_Destino", LISTA_ORIG_BASE) + ["➕ Novo Pagador..."])
                         origem_destino = st.text_input("Novo Pagador:") if orig_sel == "➕ Novo Pagador..." else orig_sel
+                        
+                c6, c7, c8 = st.columns(3)
                 with c6:
-                    conta_sel = st.selectbox("Onde o dinheiro entrou?", ["Conta Corrente", "Pix", "Corretora", "Dinheiro Físico"])
-                    conta_cartao = conta_sel
-                    
-                c7, c8 = st.columns(2)
-                with c7: desc_resumo = st.text_input("Descrição (Ex: Salário, Venda Projeto X)")
-                with c8: resp_principal = st.selectbox("Titular da Receita", obter_opcoes("Responsavel", LISTA_RESP_BASE))
+                    # Permite selecionar contas normais, cartões cadastrados e cadastrar um novo cartão/conta dinamicamente
+                    lista_contas_receita = ["Conta Corrente", "Pix", "Corretora", "Dinheiro Físico"] + (df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []) + ["➕ Novo Cartão/Conta..."]
+                    conta_sel = st.selectbox("Onde o dinheiro entrou?", lista_contas_receita)
+                    conta_cartao = st.text_input("Novo Cartão/Conta:") if conta_sel == "➕ Novo Cartão/Conta..." else conta_sel
+                with c7: desc_resumo = st.text_input("Descrição (Ex: Salário, Reembolso Shein)")
+                with c8: resp_principal = st.selectbox("Titular / Beneficiário", obter_opcoes("Responsavel", LISTA_RESP_BASE))
                 
                 st.markdown("##### 📅 Status da Entrada")
                 cr1, cr2 = st.columns(2)
                 with cr1:
-                    status_vis = st.radio("O dinheiro já está na conta?", ["Sim (Recebido/Pago)", "Ainda não (A Receber)"], horizontal=True)
+                    status_vis = st.radio("O dinheiro já está na conta / cartão?", ["Sim (Recebido/Pago)", "Ainda não (A Receber)"], horizontal=True)
                     status_final = "Pago" if "Sim" in status_vis else "Pendente"
                 with cr2:
                     tipo_frequencia = "Único"
@@ -351,7 +371,6 @@ with aba_lancamentos:
                 meses_nomes = ["01 - Janeiro", "02 - Fevereiro", "03 - Março", "04 - Abril", "05 - Maio", "06 - Junho", "07 - Julho", "08 - Agosto", "09 - Setembro", "10 - Outubro", "11 - Novembro", "12 - Dezembro"]
                 ano_comp = ano_pag = data_ocorreu.year 
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
-                subcategoria = "Geral"
 
             else: 
                 st.info("💡 Investimento é construção de patrimônio. A ordem é executada e o dinheiro transferido.")
@@ -385,7 +404,8 @@ with aba_lancamentos:
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and resp_principal:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                if tipo_mov == "Despesa" and subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                if conta_sel == "➕ Novo Cartão/Conta..." and conta_cartao: auto_salvar_cadastro("Cartao", conta_cartao)
                 
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
                 if orig_sel == "➕ Novo Pagador..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
