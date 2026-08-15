@@ -47,8 +47,6 @@ st.markdown("""
         [data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 800 !important; }
         [data-testid="stMetricLabel"] { font-size: 14px !important; font-weight: 600 !important; color: #64748B !important; }
         div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-        
-        .executive-box { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 15px; }
         hr { margin-top: 20px; margin-bottom: 20px; border: 0; border-top: 1px solid #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
@@ -172,37 +170,43 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Inteligência Financeira", "📝 Lançamentos", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. SUPER DASHBOARD UNIFICADO (BI STYLE)
+# 6. SUPER DASHBOARD UNIFICADO (UX APRIMORADA)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_geral, dash_investimentos = st.tabs(["📊 Visão Global & Faturas", "📈 Carteira de Investimentos"])
         
         with dash_geral:
-            # 🔥 O NOVO "CÉREBRO" DE FILTROS UNIFICADO 🔥
-            st.markdown("#### 🎯 Filtros Globais (Combine para análises profundas)")
-            c_f1, c_f2, c_f3, c_f4, c_f5 = st.columns(5)
+            # 🔥 O NOVO "CÉREBRO" DE FILTROS INTUITIVO 🔥
+            st.markdown("#### 🎯 Como você deseja analisar seus dados hoje?")
             
+            # Switch Mestre para definir o comportamento do mês
+            c_mode, c_mes = st.columns([2, 1])
+            with c_mode:
+                modo_visao = st.radio("Modo de Análise Mestre:", 
+                                      ["💳 Fatura / Contas a Pagar (Quando o dinheiro sai/entra)", 
+                                       "🛒 Regime de Caixa (Quando a compra realmente aconteceu)"], 
+                                      horizontal=True)
+                col_filtro = "Mes_Pagamento" if "Fatura" in modo_visao else "Competencia"
+            with c_mes:
+                meses_disp = ["Todos os Meses"] + sorted(df[col_filtro].dropna().unique(), reverse=True)
+                mes_sel = st.selectbox(f"Selecione o Mês ({'Fatura' if 'Fatura' in modo_visao else 'Compra'}):", meses_disp)
+
+            # Filtros Secundários
+            c_f1, c_f2, c_f3 = st.columns(3)
             with c_f1:
-                meses_pag = ["Todos"] + sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
-                mes_pag_sel = st.selectbox("Mês do Pagamento/Fatura:", meses_pag)
-            with c_f2:
-                meses_comp = ["Todos"] + sorted(df["Competencia"].dropna().unique(), reverse=True)
-                mes_comp_sel = st.selectbox("Mês da Compra Real:", meses_comp)
-            with c_f3:
-                lista_contas = ["Todas"] + sorted(df["Conta_Cartao"].dropna().unique())
+                lista_contas = ["Todas as Contas / Cartões"] + sorted(df["Conta_Cartao"].dropna().unique())
                 conta_sel = st.selectbox("Conta ou Cartão:", lista_contas)
-            with c_f4:
+            with c_f2:
                 todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                 resp_sel = st.multiselect("Responsável:", todos_responsaveis, default=todos_responsaveis)
-            with c_f5:
+            with c_f3:
                 status_sel = st.selectbox("Status:", ["Todos", "Pago", "Pendente"])
             
             # Aplicando os filtros inteligentes
             df_dash = df.copy()
-            if mes_pag_sel != "Todos": df_dash = df_dash[df_dash["Mes_Pagamento"] == mes_pag_sel]
-            if mes_comp_sel != "Todos": df_dash = df_dash[df_dash["Competencia"] == mes_comp_sel]
-            if conta_sel != "Todas": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
+            if mes_sel != "Todos os Meses": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
+            if conta_sel != "Todas as Contas / Cartões": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
             if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
             else: df_dash = df_dash.iloc[0:0]
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
@@ -222,30 +226,43 @@ with aba_dashboard:
             
             st.markdown("---")
             if t_desp > 0 or t_rec > 0:
-                cg1, cg2 = st.columns(2)
+                # 🔥 GRÁFICO DIÁRIO MELHORADO 🔥
+                st.markdown("##### 📅 Linha do Tempo: Em que dias as compras realmente aconteceram?")
+                st.write("Veja exatamente os dias (Data da Compra) em que você mais gastou, mesmo analisando o mês da Fatura.")
                 
-                with cg1: 
-                    # Gráfico 1: Linha do Tempo de Compras (NOVO!)
-                    st.markdown("##### 📅 Linha do Tempo: Quando o dinheiro entrou/saiu?")
-                    # Prepara os dados para a linha do tempo baseada na DATA DA COMPRA real
-                    df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index()
-                    fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, barmode="group")
-                    fig_time.update_layout(xaxis_title="", yaxis_title="Valor (R$)")
-                    st.plotly_chart(fig_time, use_container_width=True)
+                # Prepara os dados agrupando exatamente pela DATA
+                df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index()
+                df_timeline = df_timeline.sort_values(by="Data")
+                
+                fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", 
+                                  color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, 
+                                  barmode="group", text_auto='.2f')
+                
+                # Força o eixo X a ser interpretado como categoria/data exata para não pular dias
+                fig_time.update_xaxes(type='category', title="Dia Exato da Compra / Entrada")
+                fig_time.update_yaxes(title="Valor Somado (R$)")
+                st.plotly_chart(fig_time, use_container_width=True)
 
-                with cg2: 
-                    # Gráfico 2: Distribuição de Despesas
+                st.markdown("---")
+                cg1, cg2 = st.columns(2)
+                with cg1: 
                     st.markdown("##### 🍕 Para onde o dinheiro está indo?")
                     df_apenas_despesas = df_dash[df_dash["Tipo"] == "Despesa"]
                     if not df_apenas_despesas.empty:
                         fig_pie = px.pie(df_apenas_despesas, values="Valor", names="Categoria", hole=0.4)
                         st.plotly_chart(fig_pie, use_container_width=True)
                     else:
-                        st.info("Sem despesas neste filtro para gerar o gráfico.")
+                        st.info("Sem despesas neste filtro.")
+                with cg2:
+                    st.markdown("##### 🏆 Top 5 Maiores Gastos")
+                    if not df_apenas_despesas.empty:
+                        fig_bar = px.bar(df_apenas_despesas.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h')
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                    else:
+                        st.info("Sem despesas neste filtro.")
 
-            # Tabela de Detalhamento da Fatura / Filtro Atual
+            # Tabela de Detalhamento
             st.markdown("##### 💳 Detalhamento das Movimentações (Extrato)")
-            st.write("Abaixo estão todas as transações que compõem os gráficos e números acima.")
             if not df_dash.empty:
                 df_extrato = df_dash[["Data", "Competencia", "Mes_Pagamento", "Conta_Cartao", "Descricao", "Categoria", "Valor", "Status"]].sort_values(by="Data", ascending=False)
                 st.dataframe(df_extrato, use_container_width=True, hide_index=True)
