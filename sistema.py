@@ -170,17 +170,15 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Inteligência Financeira", "📝 Lançamentos", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. SUPER DASHBOARD UNIFICADO (UX APRIMORADA)
+# 6. SUPER DASHBOARD UNIFICADO (BI + VHSYS STYLE)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
         dash_geral, dash_investimentos = st.tabs(["📊 Visão Global & Faturas", "📈 Carteira de Investimentos"])
         
         with dash_geral:
-            # 🔥 O NOVO "CÉREBRO" DE FILTROS INTUITIVO 🔥
+            # Filtros de alto nível mantidos intocados
             st.markdown("#### 🎯 Como você deseja analisar seus dados hoje?")
-            
-            # Switch Mestre para definir o comportamento do mês
             c_mode, c_mes = st.columns([2, 1])
             with c_mode:
                 modo_visao = st.radio("Modo de Análise Mestre:", 
@@ -192,7 +190,6 @@ with aba_dashboard:
                 meses_disp = ["Todos os Meses"] + sorted(df[col_filtro].dropna().unique(), reverse=True)
                 mes_sel = st.selectbox(f"Selecione o Mês ({'Fatura' if 'Fatura' in modo_visao else 'Compra'}):", meses_disp)
 
-            # Filtros Secundários
             c_f1, c_f2, c_f3 = st.columns(3)
             with c_f1:
                 lista_contas = ["Todas as Contas / Cartões"] + sorted(df["Conta_Cartao"].dropna().unique())
@@ -201,9 +198,9 @@ with aba_dashboard:
                 todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                 resp_sel = st.multiselect("Responsável:", todos_responsaveis, default=todos_responsaveis)
             with c_f3:
-                status_sel = st.selectbox("Status:", ["Todos", "Pago", "Pendente"])
+                status_sel = st.selectbox("Status Geral:", ["Todos", "Pago", "Pendente"])
             
-            # Aplicando os filtros inteligentes
+            # Aplicação dos filtros
             df_dash = df.copy()
             if mes_sel != "Todos os Meses": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if conta_sel != "Todas as Contas / Cartões": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
@@ -211,34 +208,51 @@ with aba_dashboard:
             else: df_dash = df_dash.iloc[0:0]
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
             
-            t_rec = df_dash[df_dash["Tipo"] == "Receita"]["Valor"].sum()
-            t_desp = df_dash[df_dash["Tipo"] == "Despesa"]["Valor"].sum()
+            # 🔥 A NOVA MÁGICA: CÁLCULOS DIVIDIDOS ESTILO VHSYS 🔥
+            t_rec_pago = df_dash[(df_dash["Tipo"] == "Receita") & (df_dash["Status"] == "Pago")]["Valor"].sum()
+            t_rec_pend = df_dash[(df_dash["Tipo"] == "Receita") & (df_dash["Status"] == "Pendente")]["Valor"].sum()
+            
+            t_desp_pago = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Status"] == "Pago")]["Valor"].sum()
+            t_desp_pend = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Status"] == "Pendente")]["Valor"].sum()
+            
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
-            saldo = t_rec - t_desp
+            
+            # Saldo baseado apenas no dinheiro real movimentado
+            saldo_real = t_rec_pago - t_desp_pago
+            
+            # Flags Rápidos de Inteligência
+            df_receitas = df_dash[df_dash["Tipo"] == "Receita"]
+            conta_top = df_receitas.groupby("Conta_Cartao")["Valor"].sum().idxmax() if not df_receitas.empty else "Nenhuma"
+            
+            df_despesas = df_dash[df_dash["Tipo"] == "Despesa"]
+            cat_gasto_top = df_despesas.groupby("Categoria")["Valor"].sum().idxmax() if not df_despesas.empty else "Nenhuma"
             
             st.markdown("<br>", unsafe_allow_html=True)
-            # Métricas Gerais
+            
+            # BLOCO 1: O CAIXA REAL
+            st.markdown("##### 💰 Visão de Caixa Real (Apenas o que já foi Pago/Recebido)")
             cm1, cm2, cm3, cm4 = st.columns(4)
-            cm1.metric(label="Saldo do Filtro Atual", value=f"R$ {saldo:,.2f}", delta="Positivo" if saldo >= 0 else "Negativo", delta_color="normal")
-            cm2.metric(label="Total de Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas / Estornos")
-            cm3.metric(label="Total de Saídas", value=f"R$ {t_desp:,.2f}", delta="Despesas / Fatura", delta_color="inverse")
-            cm4.metric(label="Investimentos Relacionados", value=f"R$ {t_inv:,.2f}", delta="Aportes", delta_color="off")
+            cm1.metric(label="Saldo Real na Conta", value=f"R$ {saldo_real:,.2f}", delta="Positivo" if saldo_real >= 0 else "Negativo", delta_color="normal")
+            cm2.metric(label="Total Recebido (Entrou)", value=f"R$ {t_rec_pago:,.2f}")
+            cm3.metric(label="Total Pago (Saiu)", value=f"R$ {t_desp_pago:,.2f}", delta_color="inverse")
+            cm4.metric(label="Total Investido", value=f"R$ {t_inv:,.2f}", delta_color="off")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # BLOCO 2: CONTAS A PAGAR E RECEBER (INSPIRAÇÃO VHSYS)
+            st.markdown("##### ⏳ Controle de Contas a Pagar e Receber (Pendentes)")
+            cp1, cp2, cp3, cp4 = st.columns(4)
+            cp1.metric(label="A Receber (Esperado)", value=f"R$ {t_rec_pend:,.2f}", delta="Dinheiro a entrar")
+            cp2.metric(label="A Pagar (Dívidas/Fatura)", value=f"R$ {t_desp_pend:,.2f}", delta="Dinheiro a sair", delta_color="inverse")
+            cp3.metric(label="🏆 Conta c/ Mais Entradas", value=str(conta_top))
+            cp4.metric(label="🚨 Categoria c/ Mais Gastos", value=str(cat_gasto_top))
             
             st.markdown("---")
-            if t_desp > 0 or t_rec > 0:
-                # 🔥 GRÁFICO DIÁRIO MELHORADO 🔥
+            if not df_dash.empty:
+                # Linha do Tempo mantida intacta
                 st.markdown("##### 📅 Linha do Tempo: Em que dias as compras realmente aconteceram?")
-                st.write("Veja exatamente os dias (Data da Compra) em que você mais gastou, mesmo analisando o mês da Fatura.")
-                
-                # Prepara os dados agrupando exatamente pela DATA
-                df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index()
-                df_timeline = df_timeline.sort_values(by="Data")
-                
-                fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", 
-                                  color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, 
-                                  barmode="group", text_auto='.2f')
-                
-                # Força o eixo X a ser interpretado como categoria/data exata para não pular dias
+                df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index().sort_values(by="Data")
+                fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, barmode="group", text_auto='.2f')
                 fig_time.update_xaxes(type='category', title="Dia Exato da Compra / Entrada")
                 fig_time.update_yaxes(title="Valor Somado (R$)")
                 st.plotly_chart(fig_time, use_container_width=True)
@@ -247,21 +261,18 @@ with aba_dashboard:
                 cg1, cg2 = st.columns(2)
                 with cg1: 
                     st.markdown("##### 🍕 Para onde o dinheiro está indo?")
-                    df_apenas_despesas = df_dash[df_dash["Tipo"] == "Despesa"]
                     if not df_apenas_despesas.empty:
                         fig_pie = px.pie(df_apenas_despesas, values="Valor", names="Categoria", hole=0.4)
                         st.plotly_chart(fig_pie, use_container_width=True)
-                    else:
-                        st.info("Sem despesas neste filtro.")
+                    else: st.info("Sem despesas neste filtro.")
                 with cg2:
                     st.markdown("##### 🏆 Top 5 Maiores Gastos")
                     if not df_apenas_despesas.empty:
                         fig_bar = px.bar(df_apenas_despesas.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h')
                         st.plotly_chart(fig_bar, use_container_width=True)
-                    else:
-                        st.info("Sem despesas neste filtro.")
+                    else: st.info("Sem despesas neste filtro.")
 
-            # Tabela de Detalhamento
+            # Extrato
             st.markdown("##### 💳 Detalhamento das Movimentações (Extrato)")
             if not df_dash.empty:
                 df_extrato = df_dash[["Data", "Competencia", "Mes_Pagamento", "Conta_Cartao", "Descricao", "Categoria", "Valor", "Status"]].sort_values(by="Data", ascending=False)
@@ -402,7 +413,7 @@ with aba_lancamentos:
                 c4, c5, c6 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Classe de Ativo", obter_opcoes("Categoria", LISTA_CAT_INV) + ["➕ Nova..."])
-                    categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova..." else cat_sel
+                    categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova...": cat_sel
                 with c5:
                     ativo_ticker = st.text_input("Qual o Ticker/Ativo? (Ex: ITUB4, Tesouro Selic)").upper()
                     subcategoria = ativo_ticker
