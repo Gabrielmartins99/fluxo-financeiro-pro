@@ -31,23 +31,28 @@ else:
     modelo_ia = None
 
 # ========================================================
-# 2. CONFIGURAÇÃO VISUAL E CSS
+# 2. CONFIGURAÇÃO VISUAL E CSS (ESTILO BI PREMIUM)
 # ========================================================
 st.set_page_config(page_title="Fluxo Financeiro PRO", layout="wide")
 
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #F3F4F6 !important; color: #0F172A !important; }
-        h1, h2, h3, h4 { font-weight: 800 !important; letter-spacing: -0.5px !important; color: #1E293B !important; }
-        .title-gradient { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 50%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px; }
-        div[data-baseweb="input"], .stSelectbox div { border-radius: 6px !important; }
-        div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #0284C7 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: bold; border-radius: 6px; padding: 10px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { font-family: 'Inter', sans-serif !important; background-color: #F8FAFC !important; color: #0F172A !important; }
+        h1, h2, h3, h4, h5 { font-weight: 700 !important; letter-spacing: -0.5px !important; color: #1E293B !important; }
+        .title-gradient { background: linear-gradient(90deg, #0EA5E9 0%, #3B82F6 50%, #6366F1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 10px; }
         
-        [data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 800 !important; }
-        [data-testid="stMetricLabel"] { font-size: 14px !important; font-weight: 600 !important; color: #64748B !important; }
-        div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-        hr { margin-top: 20px; margin-bottom: 20px; border: 0; border-top: 1px solid #E2E8F0; }
+        /* Inputs e Botões com cantos mais suaves */
+        div[data-baseweb="input"], .stSelectbox div { border-radius: 8px !important; border-color: #E2E8F0 !important; }
+        div.stButton > button[kind="primary"] { background: linear-gradient(90deg, #3B82F6 0%, #4F46E5 100%) !important; border: none !important; color: white !important; font-weight: 600; border-radius: 8px; padding: 10px; transition: 0.3s; }
+        div.stButton > button[kind="primary"]:hover { opacity: 0.9; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        
+        /* Estilo Power BI para as Métricas Principais */
+        [data-testid="stMetricValue"] { font-size: 32px !important; font-weight: 800 !important; color: #0F172A !important; }
+        [data-testid="stMetricLabel"] { font-size: 13px !important; font-weight: 600 !important; color: #64748B !important; text-transform: uppercase; letter-spacing: 0.5px; }
+        [data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); }
+        
+        hr { margin-top: 30px; margin-bottom: 30px; border: 0; border-top: 1px solid #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,7 +111,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA E LISTAS BASE
+# 4. GESTÃO DE MASTER DATA
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome if st.session_state.user_nome else "Gabriel", "Roberson", "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
@@ -159,7 +164,7 @@ def obter_subcategorias_dinamicas(categoria_alvo):
 c_head1, c_head2 = st.columns([4, 1])
 with c_head1: st.markdown("<h2 class='title-gradient'>Fluxo Financeiro PRO</h2>", unsafe_allow_html=True)
 with c_head2:
-    st.markdown(f"<div style='text-align: right; padding-top: 15px;'><span style='font-size:18px;'>👤 Olá, <b>{st.session_state.user_nome}</b></span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: right; padding-top: 15px;'><span style='font-size:16px;'>👤 Olá, <b>{st.session_state.user_nome}</b></span></div>", unsafe_allow_html=True)
     if st.button("Sair (Logout)", use_container_width=True):
         cookie_manager.delete("u_mail", key="logout_del_mail")
         cookie_manager.delete("u_name", key="logout_del_name")
@@ -177,7 +182,7 @@ with aba_dashboard:
         dash_geral, dash_investimentos = st.tabs(["📊 Visão Global & Faturas", "📈 Carteira de Investimentos"])
         
         with dash_geral:
-            st.markdown("#### 🎯 Como você deseja analisar seus dados hoje?")
+            st.markdown("#### 🎯 Painel de Análise")
             c_mode, c_mes = st.columns([2, 1])
             with c_mode:
                 modo_visao = st.radio("Modo de Análise Mestre:", 
@@ -208,10 +213,8 @@ with aba_dashboard:
             
             t_rec_pago = df_dash[(df_dash["Tipo"] == "Receita") & (df_dash["Status"] == "Pago")]["Valor"].sum()
             t_rec_pend = df_dash[(df_dash["Tipo"] == "Receita") & (df_dash["Status"] == "Pendente")]["Valor"].sum()
-            
             t_desp_pago = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Status"] == "Pago")]["Valor"].sum()
             t_desp_pend = df_dash[(df_dash["Tipo"] == "Despesa") & (df_dash["Status"] == "Pendente")]["Valor"].sum()
-            
             t_inv = df_dash[df_dash["Tipo"] == "Investimento"]["Valor"].sum()
             saldo_real = t_rec_pago - t_desp_pago
             
@@ -223,6 +226,7 @@ with aba_dashboard:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
+            # BLOCO 1: O CAIXA REAL
             st.markdown("##### 💰 Visão de Caixa Real (Apenas o que já foi Pago/Recebido)")
             cm1, cm2, cm3, cm4 = st.columns(4)
             cm1.metric(label="Saldo Real na Conta", value=f"R$ {saldo_real:,.2f}", delta="Positivo" if saldo_real >= 0 else "Negativo", delta_color="normal")
@@ -232,6 +236,7 @@ with aba_dashboard:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
+            # BLOCO 2: CONTAS A PAGAR E RECEBER
             st.markdown("##### ⏳ Controle de Contas a Pagar e Receber (Pendentes)")
             cp1, cp2, cp3, cp4 = st.columns(4)
             cp1.metric(label="A Receber (Esperado)", value=f"R$ {t_rec_pend:,.2f}", delta="Dinheiro a entrar")
@@ -241,36 +246,41 @@ with aba_dashboard:
             
             st.markdown("---")
             if not df_dash.empty:
-                st.markdown("##### 📅 Linha do Tempo: Em que dias as compras realmente aconteceram?")
-                st.write("Veja exatamente os dias (Data da Compra) em que você mais gastou, mesmo analisando o mês da Fatura.")
+                st.markdown("##### 📅 Linha do Tempo: Frequência de Compras e Entradas")
+                df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index().sort_values(by="Data")
                 
-                df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index()
-                df_timeline = df_timeline.sort_values(by="Data")
-                
+                # Gráfico com visual Clean (estilo Power BI)
                 fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", 
                                   color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, 
-                                  barmode="group", text_auto='.2f')
-                
-                fig_time.update_xaxes(type='category', title="Dia Exato da Compra / Entrada")
-                fig_time.update_yaxes(title="Valor Somado (R$)")
+                                  barmode="group", text_auto='.2s')
+                # Configurações para remover poluição visual
+                fig_time.update_layout(margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend_title_text='')
+                fig_time.update_xaxes(type='category', title="", showgrid=False)
+                fig_time.update_yaxes(title="", showgrid=True, gridcolor='#E2E8F0')
                 st.plotly_chart(fig_time, use_container_width=True)
 
-                st.markdown("---")
+                st.markdown("<br>", unsafe_allow_html=True)
                 cg1, cg2 = st.columns(2)
                 with cg1: 
-                    st.markdown("##### 🍕 Para onde o dinheiro está indo?")
-                    if not df_apenas_despesas.empty:
-                        fig_pie = px.pie(df_apenas_despesas, values="Valor", names="Categoria", hole=0.4)
-                        st.plotly_chart(fig_pie, use_container_width=True)
-                    else:
-                        st.info("Sem despesas neste filtro.")
+                    with st.container(border=True):
+                        st.markdown("##### 🍕 Para onde o dinheiro está indo?")
+                        if not df_despesas.empty: # ERRO CORRIGIDO AQUI!
+                            # Gráfico de pizza com cores coesas e sem fundo
+                            fig_pie = px.pie(df_despesas, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                            fig_pie.update_layout(margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_pie, use_container_width=True)
+                        else: st.info("Sem despesas neste filtro para exibir o gráfico.")
                 with cg2:
-                    st.markdown("##### 🏆 Top 5 Maiores Gastos")
-                    if not df_apenas_despesas.empty:
-                        fig_bar = px.bar(df_apenas_despesas.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h')
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                    else:
-                        st.info("Sem despesas neste filtro.")
+                    with st.container(border=True):
+                        st.markdown("##### 🏆 Top 5 Maiores Gastos")
+                        if not df_despesas.empty: # ERRO CORRIGIDO AQUI!
+                            df_top_despesas = df_despesas.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5)
+                            fig_bar = px.bar(df_top_despesas, x="Valor", y="Descricao", orientation='h', color_discrete_sequence=['#EF4444'])
+                            fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                            fig_bar.update_xaxes(title="", showgrid=True, gridcolor='#E2E8F0')
+                            fig_bar.update_yaxes(title="")
+                            st.plotly_chart(fig_bar, use_container_width=True)
+                        else: st.info("Sem despesas neste filtro para exibir o gráfico.")
 
             st.markdown("##### 💳 Detalhamento das Movimentações (Extrato)")
             if not df_dash.empty:
@@ -412,7 +422,6 @@ with aba_lancamentos:
                 c4, c5, c6 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Classe de Ativo", obter_opcoes("Categoria", LISTA_CAT_INV) + ["➕ Nova..."])
-                    # CORREÇÃO APLICADA AQUI: else em vez de dois-pontos
                     categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova..." else cat_sel
                 with c5:
                     ativo_ticker = st.text_input("Qual o Ticker/Ativo? (Ex: ITUB4, Tesouro Selic)").upper()
