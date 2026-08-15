@@ -57,11 +57,8 @@ st.markdown("""
 # 3. AUTENTICAÇÃO E RESOLUÇÃO DE NOME
 # ========================================================
 def extrair_nome_de_email(email):
-    if not email:
-        return "Usuário"
-    usuario_prefixo = email.split("@")[0]
-    nome_limpo = usuario_prefixo.split(".")[0].split("_")[0].split("-")[0]
-    return nome_limpo.capitalize()
+    if not email: return "Usuário"
+    return email.split("@")[0].split(".")[0].split("_")[0].split("-")[0].capitalize()
 
 if "user_email" not in st.session_state: st.session_state.user_email = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = None
@@ -74,10 +71,8 @@ if st.session_state.user_email is None and cookies and "u_mail" in cookies and c
 
 if st.session_state.user_email and (not st.session_state.user_nome or st.session_state.user_nome == "Usuário"):
     nome_cookie = cookies.get("u_name") if cookies else None
-    if nome_cookie and nome_cookie != "Usuário":
-        st.session_state.user_nome = nome_cookie
-    else:
-        st.session_state.user_nome = extrair_nome_de_email(st.session_state.user_email)
+    if nome_cookie and nome_cookie != "Usuário": st.session_state.user_nome = nome_cookie
+    else: st.session_state.user_nome = extrair_nome_de_email(st.session_state.user_email)
 
 if not st.session_state.user_email:
     st.markdown("<h1 class='title-gradient' style='text-align: center; margin-top: 50px;'>Fluxo Financeiro PRO</h1>", unsafe_allow_html=True)
@@ -95,7 +90,6 @@ if not st.session_state.user_email:
                         nome_metadado = res.user.user_metadata.get("primeiro_nome") if res.user and res.user.user_metadata else None
                         nome_final = nome_metadado if nome_metadado else extrair_nome_de_email(res.user.email)
                         st.session_state.user_nome = nome_final
-                        
                         cookie_manager.set("u_mail", res.user.email, max_age=30*24*60*60, key="login_mail")
                         cookie_manager.set("u_name", nome_final, max_age=30*24*60*60, key="login_name")
                         time.sleep(0.5)
@@ -147,7 +141,6 @@ def obter_opcoes(coluna, lista_base):
     configs = df_configs[df_configs["Tipo"] == f"Config_{coluna}"][coluna].dropna().astype(str).unique().tolist() if not df_configs.empty and coluna in df_configs.columns else []
     existentes = df[coluna].dropna().astype(str).unique().tolist() if not df.empty and coluna in df.columns else []
     ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == coluna)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
-    
     todos = set(lista_base + configs + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
     for item in ocultos:
         if item in todos: todos.remove(item)
@@ -157,7 +150,6 @@ def obter_subcategorias_dinamicas(categoria_alvo):
     configs = df_configs[(df_configs["Tipo"] == "Config_Subcategoria") & (df_configs["Categoria"] == categoria_alvo)]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
     existentes = df[df["Categoria"] == categoria_alvo]["Subcategoria"].dropna().astype(str).unique().tolist() if not df.empty and "Subcategoria" in df.columns else []
     ocultos = df_configs[(df_configs["Tipo"] == "Config_Excluida") & (df_configs["Categoria"] == "Subcategoria")]["Subcategoria"].dropna().astype(str).unique().tolist() if not df_configs.empty else []
-    
     todos = set(SUBCATS_BASE + configs + [x.strip() for x in existentes if x.strip() not in ["", "-", "None"]])
     for item in ocultos:
         if item in todos: todos.remove(item)
@@ -177,32 +169,40 @@ with c_head2:
         time.sleep(0.5) 
         st.rerun()
 
-aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Dashboard Geral", "📝 Lançamentos Inteligentes", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
+aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Inteligência Financeira", "📝 Lançamentos", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. DASHBOARD GERAL
+# 6. SUPER DASHBOARD UNIFICADO (BI STYLE)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
-        dash_geral, dash_investimentos, dash_faturas = st.tabs(["📊 Visão Global", "📈 Carteira de Investimentos", "💳 Gestão de Faturas"])
+        dash_geral, dash_investimentos = st.tabs(["📊 Visão Global & Faturas", "📈 Carteira de Investimentos"])
         
         with dash_geral:
-            st.markdown("#### 🎯 Filtros Globais")
-            c_f1, c_f2, c_f3, c_f4 = st.columns(4)
-            with c_f1: 
-                visao_caixa = st.toggle("Visão por Pagamento/Fatura", value=True)
-                col_filtro = "Mes_Pagamento" if visao_caixa else "Competencia"
-            with c_f2:
-                meses_disp = sorted(df[col_filtro].dropna().unique(), reverse=True)
-                mes_sel = st.selectbox("Período de Análise:", ["Ver Tudo"] + meses_disp)
-            with c_f3:
-                todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
-                resp_sel = st.multiselect("Filtrar por Responsável:", todos_responsaveis, default=todos_responsaveis)
-            with c_f4:
-                status_sel = st.selectbox("Status dos Lançamentos:", ["Todos", "Pago", "Pendente"])
+            # 🔥 O NOVO "CÉREBRO" DE FILTROS UNIFICADO 🔥
+            st.markdown("#### 🎯 Filtros Globais (Combine para análises profundas)")
+            c_f1, c_f2, c_f3, c_f4, c_f5 = st.columns(5)
             
+            with c_f1:
+                meses_pag = ["Todos"] + sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
+                mes_pag_sel = st.selectbox("Mês do Pagamento/Fatura:", meses_pag)
+            with c_f2:
+                meses_comp = ["Todos"] + sorted(df["Competencia"].dropna().unique(), reverse=True)
+                mes_comp_sel = st.selectbox("Mês da Compra Real:", meses_comp)
+            with c_f3:
+                lista_contas = ["Todas"] + sorted(df["Conta_Cartao"].dropna().unique())
+                conta_sel = st.selectbox("Conta ou Cartão:", lista_contas)
+            with c_f4:
+                todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
+                resp_sel = st.multiselect("Responsável:", todos_responsaveis, default=todos_responsaveis)
+            with c_f5:
+                status_sel = st.selectbox("Status:", ["Todos", "Pago", "Pendente"])
+            
+            # Aplicando os filtros inteligentes
             df_dash = df.copy()
-            if mes_sel != "Ver Tudo": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
+            if mes_pag_sel != "Todos": df_dash = df_dash[df_dash["Mes_Pagamento"] == mes_pag_sel]
+            if mes_comp_sel != "Todos": df_dash = df_dash[df_dash["Competencia"] == mes_comp_sel]
+            if conta_sel != "Todas": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
             if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
             else: df_dash = df_dash.iloc[0:0]
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
@@ -213,19 +213,44 @@ with aba_dashboard:
             saldo = t_rec - t_desp
             
             st.markdown("<br>", unsafe_allow_html=True)
+            # Métricas Gerais
             cm1, cm2, cm3, cm4 = st.columns(4)
-            cm1.metric(label="Saldo do Período", value=f"R$ {saldo:,.2f}", delta="Lucro" if saldo >= 0 else "Prejuízo", delta_color="normal")
-            cm2.metric(label="Total Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas Líquidas")
-            cm3.metric(label="Total Saídas", value=f"R$ {t_desp:,.2f}", delta="Despesas", delta_color="inverse")
-            cm4.metric(label="Total Investido", value=f"R$ {t_inv:,.2f}", delta="Aportes e Alocações", delta_color="off")
+            cm1.metric(label="Saldo do Filtro Atual", value=f"R$ {saldo:,.2f}", delta="Positivo" if saldo >= 0 else "Negativo", delta_color="normal")
+            cm2.metric(label="Total de Entradas", value=f"R$ {t_rec:,.2f}", delta="Receitas / Estornos")
+            cm3.metric(label="Total de Saídas", value=f"R$ {t_desp:,.2f}", delta="Despesas / Fatura", delta_color="inverse")
+            cm4.metric(label="Investimentos Relacionados", value=f"R$ {t_inv:,.2f}", delta="Aportes", delta_color="off")
             
             st.markdown("---")
-            if t_desp > 0:
+            if t_desp > 0 or t_rec > 0:
                 cg1, cg2 = st.columns(2)
+                
                 with cg1: 
-                    st.plotly_chart(px.pie(df_dash[df_dash["Tipo"] == "Despesa"], values="Valor", names="Categoria", title="Distribuição de Despesas (Onde seu dinheiro foi?)", hole=0.4), use_container_width=True)
+                    # Gráfico 1: Linha do Tempo de Compras (NOVO!)
+                    st.markdown("##### 📅 Linha do Tempo: Quando o dinheiro entrou/saiu?")
+                    # Prepara os dados para a linha do tempo baseada na DATA DA COMPRA real
+                    df_timeline = df_dash.groupby(["Data", "Tipo"])["Valor"].sum().reset_index()
+                    fig_time = px.bar(df_timeline, x="Data", y="Valor", color="Tipo", color_discrete_map={"Despesa": "#EF4444", "Receita": "#10B981", "Investimento": "#6366F1"}, barmode="group")
+                    fig_time.update_layout(xaxis_title="", yaxis_title="Valor (R$)")
+                    st.plotly_chart(fig_time, use_container_width=True)
+
                 with cg2: 
-                    st.plotly_chart(px.bar(df_dash[df_dash["Tipo"] == "Despesa"].groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5), x="Valor", y="Descricao", orientation='h', title="Top 5 Maiores Gastos"), use_container_width=True)
+                    # Gráfico 2: Distribuição de Despesas
+                    st.markdown("##### 🍕 Para onde o dinheiro está indo?")
+                    df_apenas_despesas = df_dash[df_dash["Tipo"] == "Despesa"]
+                    if not df_apenas_despesas.empty:
+                        fig_pie = px.pie(df_apenas_despesas, values="Valor", names="Categoria", hole=0.4)
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    else:
+                        st.info("Sem despesas neste filtro para gerar o gráfico.")
+
+            # Tabela de Detalhamento da Fatura / Filtro Atual
+            st.markdown("##### 💳 Detalhamento das Movimentações (Extrato)")
+            st.write("Abaixo estão todas as transações que compõem os gráficos e números acima.")
+            if not df_dash.empty:
+                df_extrato = df_dash[["Data", "Competencia", "Mes_Pagamento", "Conta_Cartao", "Descricao", "Categoria", "Valor", "Status"]].sort_values(by="Data", ascending=False)
+                st.dataframe(df_extrato, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma transação encontrada com os filtros selecionados.")
 
         with dash_investimentos:
             st.markdown("### 📈 Sua Carteira de Ativos")
@@ -254,25 +279,9 @@ with aba_dashboard:
                 st.dataframe(df_invest[["Data", "Categoria", "Subcategoria", "Origem_Destino", "Valor"]].rename(columns={"Subcategoria": "Ticker", "Origem_Destino": "Corretora"}), use_container_width=True, hide_index=True)
             else:
                 st.info("Você ainda não registrou nenhum Investimento. Use a aba de Lançamentos para criar seu portfólio.")
-                
-        with dash_faturas:
-            st.markdown("### 💳 Mapa de Faturas (Contas a Pagar)")
-            st.write("Aqui aparecem estritamente as compras associadas a um Cartão de Crédito cadastrado.")
-            meses_fat = sorted(df["Mes_Pagamento"].dropna().unique(), reverse=True)
-            if meses_fat:
-                mf_sel = st.selectbox("Selecione o Vencimento:", meses_fat)
-                df_fat = df[(df["Mes_Pagamento"] == mf_sel) & (df["Tipo"] == "Despesa")]
-                cartoes = df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []
-                df_apenas_cartoes = df_fat[df_fat["Conta_Cartao"].isin(cartoes)]
-                
-                if not df_apenas_cartoes.empty:
-                    st.plotly_chart(px.bar(df_apenas_cartoes.groupby("Conta_Cartao")["Valor"].sum().reset_index().sort_values("Valor"), x="Valor", y="Conta_Cartao", orientation='h', title=f"Faturas de {mf_sel}", color_discrete_sequence=["#EF4444"]), use_container_width=True)
-                    st.dataframe(df_apenas_cartoes[["Data", "Conta_Cartao", "Descricao", "Parcela", "Valor"]], use_container_width=True, hide_index=True)
-                else: st.info("Sem despesas em cartão de crédito neste mês selecionado.")
-    else: st.info("O Dashboard aguarda lançamentos.")
 
 # ========================================================
-# 7. LANÇAMENTOS INTELIGENTES
+# 7. LANÇAMENTOS INTELIGENTES E MESA DE OPERAÇÕES
 # ========================================================
 def auto_salvar_cadastro(tipo_cad, valor, vinculada=""):
     try: 
@@ -352,7 +361,6 @@ with aba_lancamentos:
                         
                 c6, c7, c8 = st.columns(3)
                 with c6:
-                    # Permite selecionar contas normais, cartões cadastrados e cadastrar um novo cartão/conta dinamicamente
                     lista_contas_receita = ["Conta Corrente", "Pix", "Corretora", "Dinheiro Físico"] + (df_cartoes["Conta_Cartao"].unique().tolist() if not df_cartoes.empty else []) + ["➕ Novo Cartão/Conta..."]
                     conta_sel = st.selectbox("Onde o dinheiro entrou?", lista_contas_receita)
                     conta_cartao = st.text_input("Novo Cartão/Conta:") if conta_sel == "➕ Novo Cartão/Conta..." else conta_sel
