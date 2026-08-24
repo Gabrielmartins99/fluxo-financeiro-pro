@@ -194,7 +194,6 @@ with aba_dashboard:
                 lista_contas = ["Todas as Contas / Cartões"] + sorted(df["Conta_Cartao"].dropna().unique())
                 conta_sel = st.selectbox("Conta ou Cartão:", lista_contas)
             with c_f2:
-                # O filtro agora lista APENAS nomes individuais e limpos. 
                 todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                 resp_sel = st.multiselect("Responsável:", todos_responsaveis, default=todos_responsaveis)
             with c_f3:
@@ -204,9 +203,10 @@ with aba_dashboard:
             if mes_sel != "Todos os Meses": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if conta_sel != "Todas as Contas / Cartões": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
             
-            # Restaurei o filtro original puro (limpo de nomes compostos)
-            if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
-            else: df_dash = df_dash.iloc[0:0]
+            if resp_sel:
+                df_dash = df_dash[df_dash["Responsavel"].apply(lambda x: any(r in str(x) for r in resp_sel))]
+            else: 
+                df_dash = df_dash.iloc[0:0]
                 
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
             
@@ -255,6 +255,8 @@ with aba_dashboard:
                 st.plotly_chart(fig_time, use_container_width=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- GRÁFICOS GERAIS ---
                 cg1, cg2 = st.columns(2)
                 with cg1: 
                     with st.container(border=True):
@@ -266,7 +268,7 @@ with aba_dashboard:
                         else: st.info("Sem despesas neste filtro para exibir o gráfico.")
                 with cg2:
                     with st.container(border=True):
-                        st.markdown("##### 🏆 Top 5 Maiores Gastos")
+                        st.markdown("##### 🏆 Top 5 Maiores Gastos Gerais")
                         if not df_despesas.empty: 
                             df_top_despesas = df_despesas.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor").tail(5)
                             fig_bar = px.bar(df_top_despesas, x="Valor", y="Descricao", orientation='h', color_discrete_sequence=['#EF4444'])
@@ -276,6 +278,42 @@ with aba_dashboard:
                             st.plotly_chart(fig_bar, use_container_width=True)
                         else: st.info("Sem despesas neste filtro para exibir o gráfico.")
 
+                # 🔥 O NOVO MOTOR DE DRILL-DOWN (ANÁLISE PROFUNDA) 🔥
+                if not df_despesas.empty:
+                    st.markdown("---")
+                    st.markdown("### 🔎 Análise Profunda por Categoria (Drill-down)")
+                    st.write("Selecione uma Categoria específica do gráfico de pizza para descobrir exatamente o que gerou esses custos.")
+                    
+                    # O sistema tenta adivinhar a pior categoria e a pré-seleciona
+                    cat_pior = df_despesas.groupby("Categoria")["Valor"].sum().idxmax()
+                    lista_cat_disponiveis = sorted(df_despesas["Categoria"].unique().tolist())
+                    
+                    c_drill, _ = st.columns([1, 2])
+                    with c_drill:
+                        cat_investigar = st.selectbox("Selecione a Categoria para investigar:", lista_cat_disponiveis, index=lista_cat_disponiveis.index(cat_pior))
+                    
+                    # Filtra os dados apenas para a categoria selecionada (Ex: "Moradia")
+                    df_investigacao = df_despesas[df_despesas["Categoria"] == cat_investigar]
+                    
+                    cd1, cd2 = st.columns(2)
+                    with cd1:
+                        with st.container(border=True):
+                            st.markdown(f"##### Divisão de **{cat_investigar}** por Subcategoria")
+                            fig_sub = px.pie(df_investigacao, values="Valor", names="Subcategoria", hole=0.5, color_discrete_sequence=px.colors.sequential.Teal)
+                            fig_sub.update_layout(margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_sub, use_container_width=True)
+                            
+                    with cd2:
+                        with st.container(border=True):
+                            st.markdown(f"##### Exatamente onde gastou em **{cat_investigar}**?")
+                            df_top_sub = df_investigacao.groupby("Descricao")["Valor"].sum().reset_index().sort_values("Valor")
+                            fig_bar_sub = px.bar(df_top_sub, x="Valor", y="Descricao", orientation='h', color_discrete_sequence=['#F59E0B'])
+                            fig_bar_sub.update_layout(margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                            fig_bar_sub.update_xaxes(title="", showgrid=True, gridcolor='#E2E8F0')
+                            fig_bar_sub.update_yaxes(title="")
+                            st.plotly_chart(fig_bar_sub, use_container_width=True)
+
+            st.markdown("---")
             st.markdown("##### 💳 Detalhamento das Movimentações (Extrato)")
             if not df_dash.empty:
                 df_extrato = df_dash[["Data", "Competencia", "Mes_Pagamento", "Conta_Cartao", "Descricao", "Categoria", "Valor", "Status"]].sort_values(by="Data", ascending=False)
@@ -353,7 +391,6 @@ with aba_lancamentos:
                 c7, c8 = st.columns(2)
                 with c7: desc_resumo = st.text_input("Descrição Resumida (Ex: Uber, Aluguel)")
                 with c8: 
-                    # Multiselect Mantido e Funcional para Múltiplas Pessoas
                     opcoes_resp = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                     resp_lista = st.multiselect("Responsáveis (Quem vai dividir?)", opcoes_resp, default=[st.session_state.user_nome if st.session_state.user_nome else "Gabriel"])
                 
@@ -446,7 +483,6 @@ with aba_lancamentos:
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
 
         st.markdown("<br>", unsafe_allow_html=True)
-        # 🔥 MOTOR INTELIGENTE DE DIVISÃO DE CUSTOS 🔥
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and resp_lista:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
@@ -467,9 +503,7 @@ with aba_lancamentos:
                 for i in range(parcelas):
                     comp_str = f"{int(ano_comp) + ((start_m_comp - 1 + i) // 12)}-{((start_m_comp - 1 + i) % 12) + 1:02d}"
                     pag_str = f"{int(ano_pag) + ((start_m_pag - 1 + i) // 12)}-{((start_m_pag - 1 + i) % 12) + 1:02d}"
-                    
                     val_parcela = valor_total / parcelas if tipo_frequencia == "Parcelado" else valor_total
-                    # A Mágica Acontece Aqui: Divide o valor da parcela pela quantidade de pessoas no multiselect
                     val_por_pessoa = val_parcela / num_pessoas
                     
                     for pessoa in resp_lista:
