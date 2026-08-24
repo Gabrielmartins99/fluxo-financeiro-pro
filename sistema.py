@@ -194,6 +194,7 @@ with aba_dashboard:
                 lista_contas = ["Todas as Contas / Cartões"] + sorted(df["Conta_Cartao"].dropna().unique())
                 conta_sel = st.selectbox("Conta ou Cartão:", lista_contas)
             with c_f2:
+                # O filtro agora lista APENAS nomes individuais e limpos. 
                 todos_responsaveis = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                 resp_sel = st.multiselect("Responsável:", todos_responsaveis, default=todos_responsaveis)
             with c_f3:
@@ -203,10 +204,9 @@ with aba_dashboard:
             if mes_sel != "Todos os Meses": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if conta_sel != "Todas as Contas / Cartões": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
             
-            if resp_sel:
-                df_dash = df_dash[df_dash["Responsavel"].apply(lambda x: any(r in str(x) for r in resp_sel))]
-            else: 
-                df_dash = df_dash.iloc[0:0]
+            # Restaurei o filtro original puro (limpo de nomes compostos)
+            if resp_sel: df_dash = df_dash[df_dash["Responsavel"].isin(resp_sel)]
+            else: df_dash = df_dash.iloc[0:0]
                 
             if status_sel != "Todos": df_dash = df_dash[df_dash["Status"] == status_sel]
             
@@ -353,9 +353,9 @@ with aba_lancamentos:
                 c7, c8 = st.columns(2)
                 with c7: desc_resumo = st.text_input("Descrição Resumida (Ex: Uber, Aluguel)")
                 with c8: 
+                    # Multiselect Mantido e Funcional para Múltiplas Pessoas
                     opcoes_resp = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                     resp_lista = st.multiselect("Responsáveis (Quem vai dividir?)", opcoes_resp, default=[st.session_state.user_nome if st.session_state.user_nome else "Gabriel"])
-                    resp_principal = " / ".join(resp_lista) if resp_lista else "Não Informado"
                 
                 st.markdown("##### 📅 Datas Fiscais (Mês da Compra vs Pagamento da Fatura)")
                 md1, md2, md3, md4 = st.columns(4)
@@ -399,7 +399,9 @@ with aba_lancamentos:
                     conta_sel = st.selectbox("Onde o dinheiro entrou?", lista_contas_receita)
                     conta_cartao = st.text_input("Novo Cartão/Conta:") if conta_sel == "➕ Novo Cartão/Conta..." else conta_sel
                 with c7: desc_resumo = st.text_input("Descrição (Ex: Salário, Reembolso Shein)")
-                with c8: resp_principal = st.selectbox("Titular / Beneficiário", obter_opcoes("Responsavel", LISTA_RESP_BASE))
+                with c8: 
+                    resp_principal = st.selectbox("Titular / Beneficiário", obter_opcoes("Responsavel", LISTA_RESP_BASE))
+                    resp_lista = [resp_principal]
                 
                 st.markdown("##### 📅 Status da Entrada")
                 cr1, cr2 = st.columns(2)
@@ -419,7 +421,6 @@ with aba_lancamentos:
                 c4, c5, c6 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Classe de Ativo", obter_opcoes("Categoria", LISTA_CAT_INV) + ["➕ Nova..."])
-                    # CORREÇÃO APLICADA AQUI NA LINHA 425
                     categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova..." else cat_sel
                 with c5:
                     ativo_ticker = st.text_input("Qual o Ticker/Ativo? (Ex: ITUB4, Tesouro Selic)").upper()
@@ -434,6 +435,7 @@ with aba_lancamentos:
                 with c8: 
                     desc_resumo = f"Aporte em {ativo_ticker}" if ativo_ticker else "Aporte de Investimento"
                     resp_principal = st.selectbox("Titular da Conta", obter_opcoes("Responsavel", LISTA_RESP_BASE))
+                    resp_lista = [resp_principal]
                     
                 tipo_frequencia = "Único"
                 parcelas = 1
@@ -444,10 +446,11 @@ with aba_lancamentos:
                 mes_comp = mes_pag = meses_nomes[data_ocorreu.month - 1]
 
         st.markdown("<br>", unsafe_allow_html=True)
+        # 🔥 MOTOR INTELIGENTE DE DIVISÃO DE CUSTOS 🔥
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
-            if valor_total > 0 and categoria and resp_principal:
+            if valor_total > 0 and categoria and resp_lista:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                if tipo_mov == "Despesa" and subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
                 if conta_sel == "➕ Novo Cartão/Conta..." and conta_cartao: auto_salvar_cadastro("Cartao", conta_cartao)
                 
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
@@ -459,21 +462,43 @@ with aba_lancamentos:
                 novas_linhas = []
                 start_m_comp = int(mes_comp.split(" - ")[0])
                 start_m_pag = int(mes_pag.split(" - ")[0])
+                num_pessoas = len(resp_lista)
                 
                 for i in range(parcelas):
                     comp_str = f"{int(ano_comp) + ((start_m_comp - 1 + i) // 12)}-{((start_m_comp - 1 + i) % 12) + 1:02d}"
                     pag_str = f"{int(ano_pag) + ((start_m_pag - 1 + i) // 12)}-{((start_m_pag - 1 + i) % 12) + 1:02d}"
+                    
                     val_parcela = valor_total / parcelas if tipo_frequencia == "Parcelado" else valor_total
-                    desc_final = f"{desc_resumo} ({i+1}/{parcelas})" if tipo_frequencia == "Parcelado" else desc_resumo
+                    # A Mágica Acontece Aqui: Divide o valor da parcela pela quantidade de pessoas no multiselect
+                    val_por_pessoa = val_parcela / num_pessoas
                     
-                    status_laco = status_final if i == 0 or status_final != "Pago" else "Pendente"
-                    if tipo_mov in ["Investimento", "Receita"] and status_final == "Pago": status_laco = "Pago"
-                    
-                    novas_linhas.append({"user_email": st.session_state.user_email, "data_compra": str(data_ocorreu), "competencia": comp_str, "mes_pagamento": pag_str, "tipo": tipo_mov, "categoria": categoria, "subcategoria": subcategoria, "conta_cartao": conta_cartao, "valor": float(round(val_parcela, 2)), "descricao": desc_final, "parcela": f"{i+1}/{parcelas}" if tipo_frequencia == "Parcelado" else "Único", "responsavel": resp_principal, "origem_destino": origem_destino, "status": status_laco})
+                    for pessoa in resp_lista:
+                        desc_final = f"{desc_resumo} ({i+1}/{parcelas})" if tipo_frequencia == "Parcelado" else desc_resumo
+                        if num_pessoas > 1: desc_final += " (Rateio)"
+                        
+                        status_laco = status_final if i == 0 or status_final != "Pago" else "Pendente"
+                        if tipo_mov in ["Investimento", "Receita"] and status_final == "Pago": status_laco = "Pago"
+                        
+                        novas_linhas.append({
+                            "user_email": st.session_state.user_email, 
+                            "data_compra": str(data_ocorreu), 
+                            "competencia": comp_str, 
+                            "mes_pagamento": pag_str, 
+                            "tipo": tipo_mov, 
+                            "categoria": categoria, 
+                            "subcategoria": subcategoria, 
+                            "conta_cartao": conta_cartao, 
+                            "valor": float(round(val_por_pessoa, 2)), 
+                            "descricao": desc_final, 
+                            "parcela": f"{i+1}/{parcelas}" if tipo_frequencia == "Parcelado" else "Único", 
+                            "responsavel": pessoa, 
+                            "origem_destino": origem_destino, 
+                            "status": status_laco
+                        })
 
                 try:
                     supabase.table("lancamentos").insert(novas_linhas).execute()
-                    st.success("Operação Registrada!")
+                    st.success("Operação Registrada e Dividida com Sucesso!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e: st.error(f"Erro no banco de dados: {e}")
