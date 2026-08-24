@@ -199,13 +199,11 @@ with aba_dashboard:
             with c_f3:
                 status_sel = st.selectbox("Status Geral:", ["Todos", "Pago", "Pendente"])
             
-            # 🔥 Correção da Lógica de Filtro para Suportar Divisão de Contas 🔥
             df_dash = df.copy()
             if mes_sel != "Todos os Meses": df_dash = df_dash[df_dash[col_filtro] == mes_sel]
             if conta_sel != "Todas as Contas / Cartões": df_dash = df_dash[df_dash["Conta_Cartao"] == conta_sel]
             
             if resp_sel:
-                # O filtro agora encontra as despesas mesmo se divididas (Ex: "Gabriel / Roberson")
                 df_dash = df_dash[df_dash["Responsavel"].apply(lambda x: any(r in str(x) for r in resp_sel))]
             else: 
                 df_dash = df_dash.iloc[0:0]
@@ -355,7 +353,6 @@ with aba_lancamentos:
                 c7, c8 = st.columns(2)
                 with c7: desc_resumo = st.text_input("Descrição Resumida (Ex: Uber, Aluguel)")
                 with c8: 
-                    # 🔥 NOVO SISTEMA DE DIVISÃO DE DESPESAS 🔥
                     opcoes_resp = obter_opcoes("Responsavel", LISTA_RESP_BASE)
                     resp_lista = st.multiselect("Responsáveis (Quem vai dividir?)", opcoes_resp, default=[st.session_state.user_nome if st.session_state.user_nome else "Gabriel"])
                     resp_principal = " / ".join(resp_lista) if resp_lista else "Não Informado"
@@ -422,7 +419,8 @@ with aba_lancamentos:
                 c4, c5, c6 = st.columns(3)
                 with c4: 
                     cat_sel = st.selectbox("Classe de Ativo", obter_opcoes("Categoria", LISTA_CAT_INV) + ["➕ Nova..."])
-                    categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova...": cat_sel else cat_sel
+                    # CORREÇÃO APLICADA AQUI NA LINHA 425
+                    categoria = st.text_input("Nova Classe:") if cat_sel == "➕ Nova..." else cat_sel
                 with c5:
                     ativo_ticker = st.text_input("Qual o Ticker/Ativo? (Ex: ITUB4, Tesouro Selic)").upper()
                     subcategoria = ativo_ticker
@@ -449,7 +447,7 @@ with aba_lancamentos:
         if st.button("🚀 Concluir Lançamento", type="primary", use_container_width=True):
             if valor_total > 0 and categoria and resp_principal:
                 if cat_sel == "➕ Nova..." and categoria: auto_salvar_cadastro("Categoria", categoria)
-                if tipo_mov == "Despesa" and subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
+                if subcat_sel == "➕ Nova Subcategoria..." and subcategoria: auto_salvar_cadastro("Subcategoria", subcategoria, categoria)
                 if conta_sel == "➕ Novo Cartão/Conta..." and conta_cartao: auto_salvar_cadastro("Cartao", conta_cartao)
                 
                 if orig_sel == "➕ Novo Fornecedor..." and origem_destino: auto_salvar_cadastro("Origem_Destino", origem_destino)
