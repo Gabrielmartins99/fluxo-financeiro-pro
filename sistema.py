@@ -24,12 +24,13 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 🔥 SOLUÇÃO DEFINITIVA DA IA: Apontando para o modelo exato exigido pelo servidor 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # Utilizamos exatamente o gemini-3.6-flash como instruído no erro da API
+    # Mantemos a versão exata que funcionou para si no erro anterior
     modelo_ia = genai.GenerativeModel('gemini-3.6-flash')
+    ia_ativa = True
 else:
+    ia_ativa = False
     modelo_ia = None
 
 # ========================================================
@@ -681,17 +682,48 @@ with aba_cadastros:
                         st.rerun()
 
 # ========================================================
-# 9. ASSISTENTE IA
+# 9. ASSISTENTE IA (CHATBOT COM MEMÓRIA)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
-    if modelo_ia and st.session_state.user_email:
-        prompt = st.chat_input("Pergunte sobre seus dados...")
+    if ia_ativa and st.session_state.user_email:
+        
+        # 1. Cria a sessão de Chat contínua apenas uma vez (Evita peso e lentidão)
+        if "chat_obj" not in st.session_state:
+            st.session_state.chat_history = []
+            if modelo_ia:
+                st.session_state.chat_obj = modelo_ia.start_chat(history=[])
+                
+                # Injeta a base de dados num formato leve (CSV) de forma invisível
+                try:
+                    colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
+                    hist_csv = df[colunas_ia].to_csv(index=False) if not df.empty else "Vazio."
+                    contexto = f"Você é o assistente financeiro do sistema. Aqui estão os dados em formato leve CSV:\n{hist_csv}\n\nAguarde as perguntas do usuário e responda de forma clara."
+                    st.session_state.chat_obj.send_message(contexto)
+                except:
+                    pass
+
+        # 2. Renderiza as mensagens do histórico na tela
+        if "chat_history" in st.session_state:
+            for msg in st.session_state.chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+        
+        # 3. Caixa de Entrada da Pergunta
+        prompt = st.chat_input("Pergunte sobre seus dados financeiros...")
         if prompt:
-            with st.chat_message("user"): st.markdown(prompt)
-            try:
-                colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
-                hist_txt = df[colunas_ia].to_string() if not df.empty else "Vazio."
-                res = modelo_ia.generate_content(f"Aja como um assistente financeiro. Dados:\n{hist_txt}\nPergunta: {prompt}")
-                with st.chat_message("assistant"): st.markdown(res.text)
-            except Exception as e: st.error(f"Erro IA: {e}")
+            # Mostra a pergunta do usuário e guarda no histórico
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            # Mostra a resposta da IA (Agora muito mais rápida e consciente da conversa)
+            with st.chat_message("assistant"):
+                try:
+                    res = st.session_state.chat_obj.send_message(prompt)
+                    st.markdown(res.text)
+                    st.session_state.chat_history.append({"role": "assistant", "content": res.text})
+                except Exception as e:
+                    erro_msg = f"Erro na conexão com a IA: {e}"
+                    st.error(erro_msg)
+                    st.session_state.chat_history.append({"role": "assistant", "content": erro_msg})
