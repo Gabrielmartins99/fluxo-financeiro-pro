@@ -26,8 +26,8 @@ supabase: Client = init_connection()
 
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # 🔥 CORREÇÃO DA IA: Atualizado para o modelo mais recente e inteligente 🔥
-    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+    # 🔥 CORREÇÃO: Voltamos ao identificador universal e estável gemini-pro 🔥
+    modelo_ia = genai.GenerativeModel('gemini-pro')
 else:
     modelo_ia = None
 
@@ -257,7 +257,6 @@ with aba_dashboard:
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- GRÁFICOS GERAIS ---
                 cg1, cg2 = st.columns(2)
                 with cg1: 
                     with st.container(border=True):
@@ -279,7 +278,6 @@ with aba_dashboard:
                             st.plotly_chart(fig_bar, use_container_width=True)
                         else: st.info("Sem despesas neste filtro para exibir o gráfico.")
 
-                # --- DRILL-DOWN ---
                 if not df_despesas.empty:
                     st.markdown("---")
                     st.markdown("### 🔎 Análise Profunda por Categoria (Drill-down)")
@@ -691,7 +689,6 @@ with aba_assistente:
         if prompt:
             with st.chat_message("user"): st.markdown(prompt)
             try:
-                # Melhoria: Enviando colunas vitais para a IA poder responder perguntas complexas
                 colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
                 hist_txt = df[colunas_ia].to_string() if not df.empty else "Vazio."
                 res = modelo_ia.generate_content(f"Aja como um assistente financeiro. Dados:\n{hist_txt}\nPergunta: {prompt}")
