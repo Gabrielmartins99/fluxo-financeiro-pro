@@ -26,12 +26,9 @@ supabase: Client = init_connection()
 
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # Mantemos a versão exata que funcionou para si no erro anterior
-    modelo_ia = genai.GenerativeModel('gemini-3.6-flash')
     ia_ativa = True
 else:
     ia_ativa = False
-    modelo_ia = None
 
 # ========================================================
 # 2. CONFIGURAÇÃO VISUAL E CSS
@@ -109,7 +106,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA
+# 4. GESTÃO DE MASTER DATA E LISTAS BASE
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome if st.session_state.user_nome else "Gabriel", "Roberson", "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
@@ -682,48 +679,79 @@ with aba_cadastros:
                         st.rerun()
 
 # ========================================================
-# 9. ASSISTENTE IA (CHATBOT COM MEMÓRIA)
+# 9. ASSISTENTE IA (CHATBOT COM MEMÓRIA DE FERRO E ROLAGEM)
 # ========================================================
 with aba_assistente:
     st.markdown("### 🤖 Cérebro Digital")
+    st.write("Converse com a IA sobre os seus dados. O contexto e o histórico são mantidos!")
+    
     if ia_ativa and st.session_state.user_email:
         
-        # 1. Cria a sessão de Chat contínua apenas uma vez (Evita peso e lentidão)
-        if "chat_obj" not in st.session_state:
+        # 1. Cria a memória da interface se não existir
+        if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
-            if modelo_ia:
-                st.session_state.chat_obj = modelo_ia.start_chat(history=[])
-                
-                # Injeta a base de dados num formato leve (CSV) de forma invisível
-                try:
-                    colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
-                    hist_csv = df[colunas_ia].to_csv(index=False) if not df.empty else "Vazio."
-                    contexto = f"Você é o assistente financeiro do sistema. Aqui estão os dados em formato leve CSV:\n{hist_csv}\n\nAguarde as perguntas do usuário e responda de forma clara."
-                    st.session_state.chat_obj.send_message(contexto)
-                except:
-                    pass
-
-        # 2. Renderiza as mensagens do histórico na tela
-        if "chat_history" in st.session_state:
-            for msg in st.session_state.chat_history:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
         
-        # 3. Caixa de Entrada da Pergunta
-        prompt = st.chat_input("Pergunte sobre seus dados financeiros...")
+        # 2. Prepara os dados mais recentes em formato leve (CSV)
+        colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
+        hist_csv = df[colunas_ia].to_csv(index=False) if not df.empty else "Vazio."
+        
+        # 3. Cria o modelo com Instrução de Sistema (O segredo da velocidade e contexto)
+        instrucao_mestre = f"Você é o assistente financeiro do sistema Fluxo Financeiro PRO. Responda de forma clara e direta baseando-se EXCLUSIVAMENTE nestes dados:\n\n{hist_csv}"
+        try:
+            modelo_ia = genai.GenerativeModel(
+                model_name='gemini-3.6-flash',
+                system_instruction=instrucao_mestre
+            )
+        except Exception:
+            modelo_ia = genai.GenerativeModel('gemini-3.6-flash')
+        
+        # 4. Converte o histórico visual para a memória do cérebro da Google
+        historico_google = []
+        for msg in st.session_state.chat_history:
+            papel = "user" if msg["role"] == "user" else "model"
+            historico_google.append({"role": papel, "parts": [msg["content"]]})
+        
+        # Inicializa o chat reconstruindo a memória perfeitamente
+        chat_obj = modelo_ia.start_chat(history=historico_google)
+        
+        # 5. Cria a Caixa de Chat com rolagem (UX moderna)
+        caixa_chat = st.container(height=450)
+        
+        # Renderiza as mensagens passadas dentro da caixa
+        for msg in st.session_state.chat_history:
+            with caixa_chat.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        
+        # 6. O Campo de Entrada fica fixo imediatamente abaixo da caixa de conversa!
+        prompt = st.chat_input("Pergunte algo (Ex: Qual foi a categoria com maior gasto?)")
+        
         if prompt:
-            # Mostra a pergunta do usuário e guarda no histórico
+            # Salva a pergunta e mostra na tela
             st.session_state.chat_history.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
+            with caixa_chat.chat_message("user"):
                 st.markdown(prompt)
             
-            # Mostra a resposta da IA (Agora muito mais rápida e consciente da conversa)
-            with st.chat_message("assistant"):
+            # Streaming instantâneo da resposta da IA
+            with caixa_chat.chat_message("assistant"):
                 try:
-                    res = st.session_state.chat_obj.send_message(prompt)
-                    st.markdown(res.text)
-                    st.session_state.chat_history.append({"role": "assistant", "content": res.text})
+                    # Fallback seguro caso system_instruction não seja suportado em bibliotecas antigas
+                    if not hasattr(modelo_ia, '_system_instruction') and len(st.session_state.chat_history) == 1:
+                        prompt_envio = f"DADOS:\n{hist_csv}\n\nPERGUNTA: {prompt}"
+                    else:
+                        prompt_envio = prompt
+                        
+                    res = chat_obj.send_message(prompt_envio, stream=True)
+                    placeholder = st.empty()
+                    texto_final = ""
+                    
+                    for chunk in res:
+                        texto_final += chunk.text
+                        placeholder.markdown(texto_final + "▌")
+                    placeholder.markdown(texto_final)
+                    
+                    # Guarda a resposta completa na memória para as próximas perguntas
+                    st.session_state.chat_history.append({"role": "assistant", "content": texto_final})
                 except Exception as e:
-                    erro_msg = f"Erro na conexão com a IA: {e}"
+                    erro_msg = f"Erro na conexão: {e}"
                     st.error(erro_msg)
                     st.session_state.chat_history.append({"role": "assistant", "content": erro_msg})
