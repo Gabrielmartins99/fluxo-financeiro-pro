@@ -26,7 +26,8 @@ supabase: Client = init_connection()
 
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    modelo_ia = genai.GenerativeModel('gemini-1.0-pro')
+    # 🔥 CORREÇÃO DA IA: Atualizado para o modelo mais recente e inteligente 🔥
+    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
 else:
     modelo_ia = None
 
@@ -278,13 +279,12 @@ with aba_dashboard:
                             st.plotly_chart(fig_bar, use_container_width=True)
                         else: st.info("Sem despesas neste filtro para exibir o gráfico.")
 
-                # 🔥 O NOVO MOTOR DE DRILL-DOWN (ANÁLISE PROFUNDA) 🔥
+                # --- DRILL-DOWN ---
                 if not df_despesas.empty:
                     st.markdown("---")
                     st.markdown("### 🔎 Análise Profunda por Categoria (Drill-down)")
                     st.write("Selecione uma Categoria específica do gráfico de pizza para descobrir exatamente o que gerou esses custos.")
                     
-                    # O sistema tenta adivinhar a pior categoria e a pré-seleciona
                     cat_pior = df_despesas.groupby("Categoria")["Valor"].sum().idxmax()
                     lista_cat_disponiveis = sorted(df_despesas["Categoria"].unique().tolist())
                     
@@ -292,7 +292,6 @@ with aba_dashboard:
                     with c_drill:
                         cat_investigar = st.selectbox("Selecione a Categoria para investigar:", lista_cat_disponiveis, index=lista_cat_disponiveis.index(cat_pior))
                     
-                    # Filtra os dados apenas para a categoria selecionada (Ex: "Moradia")
                     df_investigacao = df_despesas[df_despesas["Categoria"] == cat_investigar]
                     
                     cd1, cd2 = st.columns(2)
@@ -692,7 +691,9 @@ with aba_assistente:
         if prompt:
             with st.chat_message("user"): st.markdown(prompt)
             try:
-                hist_txt = df[["Data", "Tipo", "Categoria", "Valor"]].to_string() if not df.empty else "Vazio."
-                res = modelo_ia.generate_content(f"Dados:\n{hist_txt}\nPergunta: {prompt}")
+                # Melhoria: Enviando colunas vitais para a IA poder responder perguntas complexas
+                colunas_ia = ["Data", "Mes_Pagamento", "Tipo", "Categoria", "Conta_Cartao", "Valor", "Status", "Responsavel"]
+                hist_txt = df[colunas_ia].to_string() if not df.empty else "Vazio."
+                res = modelo_ia.generate_content(f"Aja como um assistente financeiro. Dados:\n{hist_txt}\nPergunta: {prompt}")
                 with st.chat_message("assistant"): st.markdown(res.text)
             except Exception as e: st.error(f"Erro IA: {e}")
