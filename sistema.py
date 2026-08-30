@@ -26,8 +26,8 @@ supabase: Client = init_connection()
 
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # 🔥 CORREÇÃO: Voltamos ao identificador universal e estável gemini-pro 🔥
-    modelo_ia = genai.GenerativeModel('gemini-pro')
+    # 🔥 MOTOR IA ATUALIZADO: Usando a versão Flash moderna e rápida 🔥
+    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
 else:
     modelo_ia = None
 
@@ -107,7 +107,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA
+# 4. GESTÃO DE MASTER DATA E LISTAS BASE
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome if st.session_state.user_nome else "Gabriel", "Roberson", "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
