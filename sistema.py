@@ -24,21 +24,11 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 🔥 SOLUÇÃO DEFINITIVA DA IA: Seleção Dinâmica de Modelo 🔥
+# 🔥 SOLUÇÃO DEFINITIVA DA IA: Apontando para o modelo exato exigido pelo servidor 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    try:
-        # Pede à Google a lista de modelos permitidos para esta chave
-        modelos_disponiveis = [m.name.replace("models/", "") for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        if modelos_disponiveis:
-            # Pega o primeiro modelo compatível da lista real
-            modelo_ia = genai.GenerativeModel(modelos_disponiveis[0])
-        else:
-            # Fallback em caso de lista vazia
-            modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+    # Utilizamos exatamente o gemini-3.6-flash como instruído no erro da API
+    modelo_ia = genai.GenerativeModel('gemini-3.6-flash')
 else:
     modelo_ia = None
 
@@ -118,7 +108,7 @@ if not st.session_state.user_email:
     st.stop()
 
 # ========================================================
-# 4. GESTÃO DE MASTER DATA E LISTAS BASE
+# 4. GESTÃO DE MASTER DATA
 # ========================================================
 LISTA_RESP_BASE = [st.session_state.user_nome if st.session_state.user_nome else "Gabriel", "Roberson", "Família", "Empresa"]
 LISTA_BANC_BASE = ["Banco do Brasil", "Inter", "Nubank", "Itaú", "Bradesco", "PicPay", "Mercado Pago"]
@@ -182,7 +172,7 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Inteligência Financeira", "📝 Lançamentos", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. SUPER DASHBOARD UNIFICADO (BI + VHSYS STYLE)
+# 6. SUPER DASHBOARD UNIFICADO
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
