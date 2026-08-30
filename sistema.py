@@ -24,10 +24,21 @@ def init_connection():
 
 supabase: Client = init_connection()
 
+# 🔥 SOLUÇÃO DEFINITIVA DA IA: Seleção Dinâmica de Modelo 🔥
 if GEMINI_API_KEY and GEMINI_API_KEY.strip() != "":
     genai.configure(api_key=GEMINI_API_KEY)
-    # 🔥 MOTOR IA ATUALIZADO: Usando a versão Flash moderna e rápida 🔥
-    modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        # Pede à Google a lista de modelos permitidos para esta chave
+        modelos_disponiveis = [m.name.replace("models/", "") for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        if modelos_disponiveis:
+            # Pega o primeiro modelo compatível da lista real
+            modelo_ia = genai.GenerativeModel(modelos_disponiveis[0])
+        else:
+            # Fallback em caso de lista vazia
+            modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        modelo_ia = genai.GenerativeModel('gemini-1.5-flash')
 else:
     modelo_ia = None
 
@@ -171,7 +182,7 @@ with c_head2:
 aba_dashboard, aba_lancamentos, aba_cadastros, aba_assistente = st.tabs(["📊 Inteligência Financeira", "📝 Lançamentos", "⚙️ Central de Cadastros", "🤖 Assistente IA"])
 
 # ========================================================
-# 6. SUPER DASHBOARD UNIFICADO
+# 6. SUPER DASHBOARD UNIFICADO (BI + VHSYS STYLE)
 # ========================================================
 with aba_dashboard:
     if not df.empty and df["Valor"].sum() > 0:
